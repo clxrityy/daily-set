@@ -8,8 +8,8 @@ A web application for playing the card game "Set" online. Built with [FastAPI](h
 
 ```bash
 # Clone the repository
-git clone https://github.com/clxrityy/set.git
-cd set
+git clone https://github.com/clxrityy/daily-set.git
+cd daily-set
 
 # Run the application
 make run-dev
