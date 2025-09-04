@@ -1,0 +1,25 @@
+# fly.toml app configuration file generated for daily-set on 2025-09-04T18:06:30-04:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'daily-set'
+primary_region = 'iad'
+
+[build]
+
+[http_service]
+auto_start_machines = true
+auto_stop_machines = 'off'
+force_https = true
+internal_port = 8001
+min_machines_running = 1
+processes = ['app']
+
+[env]
+PORT = "8001"
+
+[[vm]]
+cpu_kind = 'shared'
+cpus = 1
+memory = '512mb'
