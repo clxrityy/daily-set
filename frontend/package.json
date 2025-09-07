@@ -6,7 +6,9 @@
     "scripts": {
         "dev": "vite",
         "build": "vite build",
-        "preview": "vite preview --port 5173"
+        "preview": "vite preview --port 5173",
+        "test": "vitest run --coverage",
+        "test:watch": "vitest"
     },
     "dependencies": {
         "react": "^18.3.1",
@@ -16,9 +18,13 @@
         "@vitejs/plugin-react": "^4.3.1",
         "@types/react": "^18.2.74",
         "@types/react-dom": "^18.2.24",
+        "@testing-library/react": "^16.0.0",
+        "@testing-library/user-event": "^14.5.2",
+        "@types/node": "^20.14.10",
         "eslint": "^9.9.0",
         "eslint-plugin-react": "^7.35.0",
         "typescript": "^5.5.4",
-        "vite": "^5.4.2"
+        "vite": "^5.4.2",
+        "vitest": "^2.0.5"
     }
 }

@@ -5,7 +5,7 @@ PIP = $(VENV)/bin/pip
 UVICORN = $(VENV)/bin/uvicorn
 PYTEST = $(VENV)/bin/pytest
 
-.PHONY: help venv install init-db run run-dev test clean frontend-install frontend-dev frontend-build deploy
+.PHONY: help venv install init-db run run-dev test test-backend test-frontend clean frontend-install frontend-dev frontend-build deploy
 
 help:
 	@echo "Targets:"
@@ -35,8 +35,13 @@ run: install
 run-dev: install
 	$(UVICORN) app.main:app --reload
 
-test: install
+test: test-backend test-frontend
+
+test-backend: install
 	$(PYTEST)
+
+test-frontend: frontend-install
+	cd frontend && npm test
 
 clean:
 	rm -rf $(VENV) set.db __pycache__ .pytest_cache

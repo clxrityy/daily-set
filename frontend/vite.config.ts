@@ -11,6 +11,14 @@ export default defineConfig(({ command }) => ({
         outDir: resolve(__dirname, '../app/static/dist'),
         emptyOutDir: true,
     },
+    test: {
+        environment: 'jsdom',
+        globals: true,
+        setupFiles: './vitest.setup.ts',
+        coverage: {
+            reporter: ['text', 'json', 'html']
+        }
+    },
     server: {
         port: 5173,
         proxy: {
