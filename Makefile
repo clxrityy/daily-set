@@ -5,13 +5,14 @@ PIP = $(VENV)/bin/pip
 UVICORN = $(VENV)/bin/uvicorn
 PYTEST = $(VENV)/bin/pytest
 
-.PHONY: help venv install init-db run run-dev test test-backend test-frontend clean frontend-install frontend-dev frontend-build deploy
+.PHONY: help venv install init-db run run-dev test test-backend test-frontend clean dev frontend-install frontend-dev frontend-build deploy db-reset
 
 help:
 	@echo "Targets:"
 	@echo "  make venv       - create virtualenv at .venv"
 	@echo "  make install    - install deps into .venv"
 	@echo "  make init-db    - initialize sqlite db"
+	@echo "  make db-reset   - delete local sqlite db (set.db) and re-initialize"
 	@echo "  make run        - run uvicorn (prod-ish)"
 	@echo "  make run-dev    - run uvicorn with --reload"
 	@echo "  make test       - run pytest"
@@ -61,4 +62,9 @@ frontend-build:
 
 deploy: frontend-build
 	bash scripts/deploy.sh
+
+# Delete local SQLite DB and re-initialize schema
+db-reset: install
+	rm -f set.db
+	$(PYTHON) -m app.init_db
 

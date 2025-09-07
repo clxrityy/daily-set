@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { loadDaily, startSession as apiStart, submitSet } from './api'
+import { startSession as apiStart, submitSet, loadActiveSession } from './api'
 import type { Card, SubmitResult } from './api'
 
 export function isValidSet(a: Card, b: Card, c: Card) {
@@ -81,8 +81,12 @@ export function useGame() {
                 localStorage.removeItem(STORAGE_KEY)
                 return false
             }
-            if (Array.isArray(saved.board) && saved.board.length) setBoard(saved.board)
-            else setBoard(await loadDaily())
+            // Only restore board if a game session was started
+            if (typeof saved.startAt === 'number' && Array.isArray(saved.board) && saved.board.length) {
+                setBoard(saved.board)
+            } else {
+                return false
+            }
             setSelected([])
             setCleared(new Set(Array.isArray(saved.cleared) ? saved.cleared : []))
             setSessionId(saved.sessionId || null)
@@ -95,14 +99,81 @@ export function useGame() {
         }
     }, [])
 
-    const load = useCallback(async () => {
-        const restored = await restoreFromStorage()
-        if (restored) return
-        const b = await loadDaily()
-        setBoard(b)
-        setSelected([])
-        setCleared(new Set())
-    }, [restoreFromStorage])
+    // Helper function to get saved start time from local storage
+    const getSavedStartTime = useCallback((): number | null => {
+        try {
+            const raw = localStorage.getItem(STORAGE_KEY)
+            if (!raw) return null
+
+            const saved = JSON.parse(raw)
+            if (saved?.date === today() && typeof saved.startAt === 'number') {
+                return saved.startAt
+            }
+        } catch { /* noop */ }
+        return null
+    }, [])
+
+    // Helper function to persist session data to local storage
+    const persistSessionData = useCallback((board: Card[], effectiveStart: number | null, sessionId: string | null) => {
+        try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify({
+                date: today(),
+                startAt: effectiveStart,
+                board,
+                cleared: [],
+                sessionId: sessionId || null,
+                sessionToken,
+                foundSets,
+            }))
+        } catch { /* noop */ }
+    }, [sessionToken, foundSets])
+
+    // Helper function to load and process server-side session
+    const loadServerSession = useCallback(async (savedStartAt: number | null): Promise<boolean> => {
+        try {
+            const s = await loadActiveSession()
+            if (!s?.active || !s.board || !Array.isArray(s.board)) return false;
+
+            setBoard(s.board)
+            setSessionId(s.session_id || null)
+
+            const parsed = s.start_ts ? Date.parse(s.start_ts) : NaN
+            const now = Date.now()
+            let effectiveStart: number | null = Number.isFinite(parsed) ? parsed : savedStartAt
+            // Guard: if server-start is in the future relative to client clock (>3s), fall back
+            if (typeof effectiveStart === 'number' && effectiveStart - now > 3000) {
+                effectiveStart = savedStartAt ?? now
+            }
+            if (!(typeof effectiveStart === 'number' && effectiveStart)) {
+                // As a last resort, start now so the timer ticks
+                effectiveStart = Date.now()
+            }
+            setStartAt(effectiveStart)
+            setCleared(new Set())
+
+            persistSessionData(s.board, effectiveStart, s.session_id || null)
+            return true
+        } catch { /* ignore */ }
+        return false
+    }, [persistSessionData])
+
+    const load = useCallback(async (): Promise<boolean> => {
+        // Read any locally persisted session snapshot upfront (for fallback start time)
+        const savedStartAt = getSavedStartTime()
+
+        // 1) Prefer server-side active session (authoritative)
+        if (await loadServerSession(savedStartAt)) {
+            return true
+        }
+
+        // 2) Fall back to localStorage restore (only if started previously)
+        if (await restoreFromStorage()) {
+            return true
+        }
+
+        // 3) Not started: do not fetch the board yet
+        return false
+    }, [getSavedStartTime, loadServerSession, restoreFromStorage])
 
     const start = useCallback(async (username?: string | null) => {
         const raw = (username ?? '').trim()
@@ -111,14 +182,30 @@ export function useGame() {
         const res = await apiStart(name)
         setSessionId(res.session_id ?? null)
         setSessionToken(res.session_token ?? null)
+        const parsedServerStart = res?.start_ts ? Date.parse(res.start_ts) : NaN
         const now = Date.now()
-        setStartAt(now)
+        let effectiveStart = Number.isFinite(parsedServerStart) ? parsedServerStart : now
+        // Guard: if server-start is ahead of client clock (>3s), use client now
+        if (effectiveStart - now > 3000) {
+            effectiveStart = now
+        }
+        setStartAt(effectiveStart)
+        // Load the authoritative daily board after session start
+        let newBoard: Card[] | null = null
+        try {
+            const resp = await fetch('/api/daily', { credentials: 'same-origin' })
+            const data = await resp.json()
+            if (Array.isArray(data?.board)) {
+                newBoard = data.board as Card[]
+                setBoard(newBoard)
+            }
+        } catch { /* ignore network error */ }
         // Persist immediately with current board snapshot
         try {
             localStorage.setItem(STORAGE_KEY, JSON.stringify({
                 date: today(),
-                startAt: now,
-                board,
+                startAt: effectiveStart,
+                board: newBoard ?? board,
                 cleared: Array.from(cleared),
                 sessionId: res.session_id ?? null,
                 sessionToken: res.session_token ?? null,
@@ -150,13 +237,19 @@ export function useGame() {
         if (!a || !b || !c || !isValidSet(a, b, c)) {
             return { ok: false as const, data: { detail: 'Not a set (client check)' }, userFriendly: true } as SubmitResult
         }
-        const secs = startAt ? Math.floor((Date.now() - startAt) / 1000) : null
-        const res = await submitSet({
-            indices: selected,
-            seconds: secs,
-            session_id: sessionId,
-            session_token: sessionToken,
-        })
+        // Compute seconds safely; never send negative or NaN; omit if not valid or no session
+        let secs: number | null = null
+        if (typeof startAt === 'number') {
+            const delta = Math.floor((Date.now() - startAt) / 1000)
+            if (Number.isFinite(delta)) secs = Math.max(0, delta)
+        }
+        const payload: any = { indices: selected }
+        if (sessionId) {
+            payload.session_id = sessionId
+            payload.session_token = sessionToken
+            if (secs !== null) payload.seconds = secs
+        }
+        const res = await submitSet(payload)
         // Hint for users if session wasn't started
         if (!res.ok && !sessionId) {
             (res as any).userFriendly = true
@@ -183,11 +276,15 @@ export function useGame() {
         return res
     }, [selected, startAt, sessionId, sessionToken, board])
 
-    const complete = useMemo(() => !hasValidSets(board, cleared), [board, cleared])
+    const complete = useMemo(() => {
+        // Only consider completion when a session has started and a board is present
+        if (!startAt) return false
+        if (!board || board.length < 3) return false
+        return !hasValidSets(board, cleared)
+    }, [board, cleared, startAt])
 
-    // Persist session state whenever it changes (and a session exists)
+    // Persist session state whenever it changes (even without a server session)
     useEffect(() => {
-        if (!sessionId) return
         try {
             localStorage.setItem(STORAGE_KEY, JSON.stringify({
                 date: today(),
@@ -203,7 +300,7 @@ export function useGame() {
 
     // If the game is complete, clear persisted session so next day starts clean
     useEffect(() => {
-        if (complete) {
+        if (complete && startAt && board && board.length >= 3) {
             try {
                 // Persist a completion snapshot for overlay (keep for the day)
                 localStorage.setItem(COMPLETED_KEY, JSON.stringify({
@@ -214,7 +311,7 @@ export function useGame() {
                 localStorage.removeItem(STORAGE_KEY)
             } catch { /* noop */ }
         }
-    }, [complete, foundSets])
+    }, [complete, foundSets, startAt, board])
 
     return { board, setBoard, load, selected, setSelected, toggleSelect, submitSelected, start, startAt, complete, cleared, sessionId }
 }

@@ -4,7 +4,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pathlib import Path
-from fastapi.responses import RedirectResponse, JSONResponse
+from fastapi.responses import RedirectResponse, JSONResponse, FileResponse
 from sqlmodel import SQLModel, Session, create_engine, select
 from . import models, crud, game
 from pydantic import BaseModel, Field, validator
@@ -17,6 +17,8 @@ import re
 from sqlmodel import Session as SQLSession
 import json
 from datetime import datetime, timezone
+from starlette.middleware.base import BaseHTTPMiddleware
+
 
 # Rate limiting - store last request times per IP
 _RATE_LIMIT_STORE: dict = {}
@@ -104,6 +106,37 @@ async def broadcast_event(event: dict):
 
 app = FastAPI(title="Daily Set")
 
+# Security headers & Content Security Policy
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        # Strict Content Security Policy suitable for this app
+        csp = " ".join([
+            "default-src 'self'",
+            "script-src 'self'",
+            "style-src 'self' 'unsafe-inline'",
+            "img-src 'self' data:",
+            "font-src 'self'",
+            "connect-src 'self' ws: wss:",
+            "object-src 'none'",
+            "base-uri 'self'",
+            "frame-ancestors 'none'",
+            "form-action 'self'",
+            "upgrade-insecure-requests",
+        ])
+        response.headers['Content-Security-Policy'] = csp
+        # Additional best-practice headers
+        response.headers.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
+        response.headers.setdefault('X-Content-Type-Options', 'nosniff')
+        response.headers.setdefault('X-Frame-Options', 'DENY')
+        response.headers.setdefault('Permissions-Policy', 'geolocation=(), microphone=(), camera=()')
+        response.headers.setdefault('Cross-Origin-Opener-Policy', 'same-origin')
+        # HSTS is only relevant when behind HTTPS; enabling is generally safe in prod
+        response.headers.setdefault('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+        return response
+
+app.add_middleware(SecurityHeadersMiddleware)
+
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
@@ -150,6 +183,30 @@ app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 def root():
     # redirect to the built React app (Vite outDir -> /static/dist)
     return RedirectResponse(url="/static/dist/index.html")
+
+
+@app.get("/robots.txt", include_in_schema=False)
+def robots_txt():
+    path = _STATIC_DIR / "robots.txt"
+    if path.exists():
+        return FileResponse(str(path), media_type="text/plain")
+    return JSONResponse({"detail": "robots.txt not found"}, status_code=404)
+
+
+@app.get("/sitemap.xml", include_in_schema=False)
+def sitemap_xml():
+    path = _STATIC_DIR / "sitemap.xml"
+    if path.exists():
+        return FileResponse(str(path), media_type="application/xml")
+    return JSONResponse({"detail": "sitemap.xml not found"}, status_code=404)
+
+
+@app.get("/site.webmanifest", include_in_schema=False)
+def site_manifest():
+    path = _STATIC_DIR / "site.webmanifest"
+    if path.exists():
+        return FileResponse(str(path), media_type="application/manifest+json")
+    return JSONResponse({"detail": "site.webmanifest not found"}, status_code=404)
 
 
 @app.get("/health", include_in_schema=False)
@@ -361,6 +418,21 @@ class SubmitSetRequest(BaseModel):
             raise ValueError('All card indices must be unique')
         return v
 
+    @validator('seconds', pre=True)
+    def normalize_seconds(cls, v):
+        # Allow missing/null seconds; coerce negatives to 0 and cap at 24h
+        if v is None or v == "":
+            return None
+        try:
+            val = int(v)
+        except Exception:
+            return None
+        if val < 0:
+            return 0
+        if val > 86400:
+            return 86400
+        return val
+
 
 class StartSessionRequest(BaseModel):
     username: Optional[str] = Field(None, max_length=12)
@@ -440,8 +512,13 @@ def start_session(body: StartSessionRequest, request: Request, response: Respons
     except Exception:
         pass
 
-    board = game.daily_board(date)
-    gs = crud.create_session(session, player_id, date, board)
+    # Reuse existing unfinished session for this player/date if present
+    existing = crud.get_active_session_for_player_date(session, player_id, date)
+    if existing:
+        gs = existing
+    else:
+        board = game.daily_board(date)
+        gs = crud.create_session(session, player_id, date, board)
     start_ts = gs.start_ts.isoformat() if gs.start_ts is not None else None
     token = None
     if gs.id is not None:
@@ -473,6 +550,30 @@ def status(request: Request, session: Session = Depends(get_session)):
     if detail:
         payload.update(detail)
     return payload
+
+
+@app.get("/api/session")
+def get_current_session(request: Request, session: Session = Depends(get_session)):
+    """Return current active session for today if exists, including board and start_ts.
+    Uses player_token cookie to resolve the player.
+    """
+    date = game.today_str()
+    pid = _resolve_player_id(session, None, request)
+    if not pid:
+        return {"active": False}
+    gs = crud.get_active_session_for_player_date(session, pid, date)
+    if not gs:
+        return {"active": False}
+    try:
+        board = json.loads(gs.board_json)
+    except Exception:
+        board = []
+    return {
+        "active": True,
+        "session_id": gs.id,
+        "start_ts": gs.start_ts.isoformat() if gs.start_ts else None,
+        "board": board,
+    }
 
 
 @app.post("/api/rotate_session/{session_id}")
@@ -512,7 +613,8 @@ def rotate_session(session_id: str, request: Request, response: Response, sessio
     # sign a new token with the rotated secret and set it as HttpOnly cookie
     new_token = crud.sign_session_token(session, session_id)
     # secure flag should be True in production; use env var or default to False for local testing
-    secure_cookie = False
+    import os
+    secure_cookie = os.getenv('COOKIE_SECURE', '0') in ('1', 'true', 'True')
     response.set_cookie('session_token', new_token or '', httponly=True, secure=secure_cookie, samesite='lax')
     return {"session_id": session_id}
 

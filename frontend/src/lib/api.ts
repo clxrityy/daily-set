@@ -77,6 +77,11 @@ export async function loadStatus(): Promise<{ date: string; completed: boolean; 
     return res.json()
 }
 
+export async function loadActiveSession(): Promise<{ active: boolean; session_id?: string; start_ts?: string | null; board?: Card[] }> {
+    const res = await enhancedFetch('/api/session')
+    return res.json()
+}
+
 export async function submitSet(payload: SubmitSetPayload): Promise<SubmitResult> {
     try {
         const res = await enhancedFetch('/api/submit_set', {

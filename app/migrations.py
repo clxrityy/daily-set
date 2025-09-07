@@ -102,11 +102,26 @@ def run_migrations():
     
     apply_migration(engine, "002_cleanup_indexes", migration_002)
     
-    # Migration 003: Add completed_at timestamp to completion
+    # Migration 003: Add completed_at timestamp to completion (idempotent)
+    # Check if column exists using a direct engine connection (works across SQLAlchemy versions)
+    try:
+        with engine.connect() as conn:
+            res = conn.execute(text("SELECT 1 FROM pragma_table_info('completion') WHERE name='completed_at'"))
+            col_exists = res.first() is not None
+    except Exception:
+        col_exists = False
     migration_003 = """
     ALTER TABLE completion ADD COLUMN completed_at TEXT
     """
-    apply_migration(engine, "003_add_completed_at", migration_003)
+    if not col_exists:
+        apply_migration(engine, "003_add_completed_at", migration_003)
+    else:
+        # Record as applied if not already tracked
+        if not has_migration_been_applied(engine, "003_add_completed_at"):
+            with Session(engine) as session:
+                session.add(Migration(name="003_add_completed_at", applied_at=datetime.now()))
+                session.commit()
+            logger.info("Migration 003_add_completed_at already present (column exists); recorded as applied")
     
     logger.info("All migrations completed")
 

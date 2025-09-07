@@ -2,7 +2,7 @@ from sqlmodel import Session, create_engine, select as sqlmodel_select, col
 from passlib.context import CryptContext
 from . import models
 from datetime import datetime, timezone
-from sqlalchemy import func, select as sa_select
+from sqlalchemy import func, select as sa_select, desc
 import json
 from datetime import datetime, timedelta, timezone
 import uuid
@@ -165,6 +165,19 @@ def rotate_session_secret(session: Session, sid: str) -> Optional[str]:
 
 def get_session_by_id(session: Session, sid: str):
     return session.get(models.GameSession, sid)
+
+
+def get_active_session_for_player_date(session: Session, player_id: Optional[int], date: str):
+    """Return the most recent unfinished session for this player/date if any."""
+    if player_id is None:
+        return None
+    return session.exec(
+        sqlmodel_select(models.GameSession)
+        .where(models.GameSession.player_id == player_id)
+        .where(models.GameSession.date == date)
+        .where(models.GameSession.finished == False)  # noqa: E712
+        .order_by(desc(models.GameSession.start_ts))
+    ).first()
 
 
 def finish_session(session: Session, sid: str):

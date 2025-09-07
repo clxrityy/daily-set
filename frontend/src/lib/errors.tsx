@@ -28,20 +28,50 @@ export function ToastProvider({ children }: { readonly children: React.ReactNode
         <ToastCtx.Provider value={ctxValue}>
             {children}
             <div id="toast-container" className="toast-container">
-                {toasts.map(t => (
-                    <div key={t.id} className={`toast toast-${t.severity ?? 'info'} toast-show`}>
-                        <div className="toast-content">
-                            <span className="toast-message">{t.message}</span>
-                            <button
-                                className="toast-close"
-                                aria-label="Close"
-                                onClick={() => removeToastById(t.id)}
-                            >
-                                &times;
-                            </button>
+                {toasts.map(t => {
+                    let startX = 0
+                    let startY = 0
+                    const onTouchStart: React.TouchEventHandler<HTMLDivElement> = (e) => {
+                        const first = e.touches && e.touches.length > 0 ? e.touches[0] : null
+                        if (first) {
+                            startX = first.clientX
+                            startY = first.clientY
+                        }
+                    }
+                    const onTouchEnd: React.TouchEventHandler<HTMLDivElement> = (e) => {
+                        const touch = e.changedTouches?.[0]
+                        if (!touch) return
+                        const dx = touch.clientX - startX
+                        const dy = touch.clientY - startY
+                        // Dismiss on horizontal swipe over threshold and dominant over vertical
+                        if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) {
+                            removeToastById(t.id)
+                        }
+                    }
+                    const onKeyDown: React.KeyboardEventHandler<HTMLDivElement> = (e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            removeToastById(t.id)
+                        }
+                    }
+                    return (
+                        <div
+                            key={t.id}
+                            className={`toast toast-${t.severity ?? 'info'} toast-show`}
+                            role="status"
+                            tabIndex={0}
+                            onClick={() => removeToastById(t.id)}
+                            onTouchStart={onTouchStart}
+                            onTouchEnd={onTouchEnd}
+                            onKeyDown={onKeyDown}
+                            aria-label={`Notification: ${t.message}. Tap or press Enter to dismiss.`}
+                        >
+                            <div className="toast-content">
+                                <span className="toast-message">{t.message}</span>
+                            </div>
                         </div>
-                    </div>
-                ))}
+                    )
+                })}
             </div>
         </ToastCtx.Provider>
     )

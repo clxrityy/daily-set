@@ -34,10 +34,12 @@ function InnerApp() {
         weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
     }), [])
 
-    // Load board
+    // Initial load: attempt restore only; do not fetch daily board until started
     useEffect(() => {
         let alive = true
-        load().catch((e) => { if (alive) setError(String(e)) }).finally(() => { if (alive) setLoading(false) })
+        load()
+            .catch((e) => { if (alive) setError(String(e)) })
+            .finally(() => { if (alive) setLoading(false) })
         return () => { alive = false }
     }, [load])
 
@@ -80,15 +82,19 @@ function InnerApp() {
             setElapsed(0)
             return
         }
-        const compute = () => Math.max(0, Math.floor((Date.now() - startAt) / 1000))
-        if (complete) {
-            setElapsed(compute())
-            return
+        let rafId: number | null = null
+        let lastShown = -1
+        const loop = () => {
+            if (!startAt) return
+            const secs = Math.max(0, Math.floor((Date.now() - startAt) / 1000))
+            if (secs !== lastShown) {
+                setElapsed(secs)
+                lastShown = secs
+            }
+            if (!complete) rafId = requestAnimationFrame(loop)
         }
-        const update = () => setElapsed(compute())
-        update()
-        const id = setInterval(update, 1000)
-        return () => clearInterval(id)
+        loop()
+        return () => { if (rafId != null) cancelAnimationFrame(rafId) }
     }, [startAt, complete])
 
     const mm = Math.floor(elapsed / 60).toString().padStart(2, '0')
@@ -179,7 +185,7 @@ function InnerApp() {
                 </div>
             )}
 
-            {!loading && !error && board && (
+            {!loading && !error && board && startAt && (
                 <Board
                     board={board}
                     selected={selected}

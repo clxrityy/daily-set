@@ -17,6 +17,7 @@ min_machines_running = 1
 processes = ['app']
 
 [env]
+COOKIE_SECURE = "1"
 PORT = "8001"
 
 [[vm]]

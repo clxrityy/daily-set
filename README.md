@@ -2,6 +2,8 @@
 
 [![Frontend CI](https://github.com/clxrityy/daily-set/actions/workflows/frontend.yml/badge.svg?branch=main)](https://github.com/clxrityy/daily-set/actions/workflows/frontend.yml)
 [![Backend CI](https://github.com/clxrityy/daily-set/actions/workflows/backend.yml/badge.svg?branch=main)](https://github.com/clxrityy/daily-set/actions/workflows/backend.yml)
+[![Frontend Coverage](https://codecov.io/gh/clxrityy/daily-set/branch/main/graph/badge.svg?flag=frontend)](https://codecov.io/gh/clxrityy/daily-set)
+[![Backend Coverage](https://codecov.io/gh/clxrityy/daily-set/branch/main/graph/badge.svg?flag=backend)](https://codecov.io/gh/clxrityy/daily-set)
 
 > https://daily-set.fly.dev/
 
