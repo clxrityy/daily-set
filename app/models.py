@@ -26,3 +26,4 @@ class Completion(SQLModel, table=True):
     player_id: int
     date: str  # YYYY-MM-DD
     seconds: int
+    completed_at: Optional[datetime] = None

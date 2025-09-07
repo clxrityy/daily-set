@@ -279,35 +279,32 @@ body {
 
 /* no special sizing for single symbol: every symbol uses the same size */
 
-/* small screens / mobile: make cards larger and arrange into two columns */
+/* small screens / mobile: strict two-column grid and larger tap targets */
 @media (max-width: 520px) {
 
-    /* allow the board to use the full width and place two cards per row */
-
     #board {
-        max-width: 100%;
-        gap: 8px;
-        padding: 8px;
-        display: flex;
-        flex-wrap: wrap;
-        /* Removed justify-content: center for proper two-column flow */
+        display: grid !important;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px !important;
+        max-width: 100% !important;
+        padding: 10px !important;
+        align-items: stretch;
+        justify-items: stretch;
     }
 
-    /* two-up layout: each card takes ~50% minus gaps */
     .card {
-        width: 50% !important;
+        width: auto !important;
         height: auto !important;
         min-width: 0 !important;
-        min-height: 0 !important;
+        min-height: 120px !important;
         margin: 0 !important;
-        --symbol-size: calc((100% - 24px) / 6);
-        /* make symbol size stable relative to card */
+        padding: 10px !important;
+        aspect-ratio: 5 / 4;
+        /* larger symbols on mobile for better tap targets */
+        --symbol-size: clamp(28px, 12vw, 56px);
     }
 
-    /* symbols sizing relative to card size on mobile: use computed --symbol-size so all symbols match */
     .card .symbols {
-        gap: 6px;
+        gap: 8px;
     }
-
-    /* rely on global .card .symbol which uses var(--symbol-size) so symbols are identical across counts */
 }

@@ -1,18 +1,58 @@
-from fastapi import FastAPI, Depends, HTTPException, status, Request, Response, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Depends, HTTPException, Request, Response, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from pathlib import Path
 from fastapi.responses import RedirectResponse, JSONResponse
 from sqlmodel import SQLModel, Session, create_engine, select
 from . import models, crud, game
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, validator
 from typing import List, Optional
 from .deps import get_session
 
 import asyncio
 import time
+import re
 from sqlmodel import Session as SQLSession
 import json
 from datetime import datetime, timezone
+
+# Rate limiting - store last request times per IP
+_RATE_LIMIT_STORE: dict = {}
+
+def check_rate_limit(request: Request, max_requests: int = 30, window_seconds: int = 60) -> bool:
+    """
+    Simple in-memory rate limiting. Returns True if request is allowed, False if rate limited.
+    Default: 30 requests per 60 seconds per IP address.
+    """
+    client_ip = request.client.host if request.client else "unknown"
+    current_time = time.time()
+    
+    # Clean up old entries (older than window)
+    cutoff_time = current_time - window_seconds
+    _RATE_LIMIT_STORE[client_ip] = [
+        req_time for req_time in _RATE_LIMIT_STORE.get(client_ip, []) 
+        if req_time > cutoff_time
+    ]
+    
+    # Check if under the limit
+    if len(_RATE_LIMIT_STORE[client_ip]) >= max_requests:
+        return False
+    
+    # Add current request
+    _RATE_LIMIT_STORE[client_ip].append(current_time)
+    return True
+
+def rate_limit_dependency(max_requests: int = 30, window_seconds: int = 60):
+    """Create a dependency function that raises HTTP 429 if rate limited"""
+    def dependency(request: Request):
+        if not check_rate_limit(request, max_requests, window_seconds):
+            raise HTTPException(
+                status_code=429,
+                detail=f"Rate limit exceeded. Maximum {max_requests} requests per {window_seconds} seconds."
+            )
+    return dependency
 
 # track websocket connections -> metadata {ws: {'player_id': int|None, 'last_sent': float}}
 _WS_CONNECTIONS: dict = {}
@@ -64,6 +104,43 @@ async def broadcast_event(event: dict):
 
 app = FastAPI(title="Daily Set")
 
+# Configure CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://daily-set.fly.dev",  # Production domain
+        "http://localhost:3000",      # Local development
+        "http://localhost:8000",      # Local FastAPI server
+        "http://127.0.0.1:3000",     # Alternative localhost
+    "http://127.0.0.1:8000",     # Alternative localhost
+    "http://localhost:5173",     # Vite dev server
+    "http://127.0.0.1:5173",     # Vite dev server alt
+    ],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=[
+        "Accept",
+        "Accept-Language", 
+        "Content-Language",
+        "Content-Type",
+        "Authorization",
+        "X-Requested-With",
+    ],
+)
+
+# Add validation error handler for better debugging
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    print(f"Validation error on {request.method} {request.url}: {exc.errors()}")
+    return JSONResponse(
+        status_code=422,
+        content={
+            "detail": exc.errors(),
+            "body": exc.body,
+            "message": "Input validation failed"
+        }
+    )
+
 # mount static frontend (files are under app/static) using package-relative path
 _STATIC_DIR = Path(__file__).resolve().parent / "static"
 app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
@@ -71,8 +148,8 @@ app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 
 @app.get("/", include_in_schema=False)
 def root():
-    # redirect to the static index for convenience
-    return RedirectResponse(url="/static/index.html")
+    # redirect to the built React app (Vite outDir -> /static/dist)
+    return RedirectResponse(url="/static/dist/index.html")
 
 
 @app.get("/health", include_in_schema=False)
@@ -80,19 +157,63 @@ def health():
     return JSONResponse({"status": "ok"})
 
 
+@app.get("/api/cache/stats", include_in_schema=False)
+def cache_stats():
+    """Get cache statistics for monitoring"""
+    from .cache import get_cache
+    
+    cache = get_cache()
+    stats = cache.get_stats()
+    
+    return JSONResponse({
+        "cache_stats": stats,
+        "status": "ok"
+    })
+
+
 @app.on_event("startup")
 def on_startup():
     import os
+    from .migrations import run_migrations
+    from .cache import warm_cache_for_today_and_recent
+    
     db_path = os.getenv("DATABASE_URL", "sqlite:///./set.db")
     engine = create_engine(db_path, echo=False, connect_args={"check_same_thread": False})
+    
+    # Create tables first
     SQLModel.metadata.create_all(engine)
+    
+    # Run database migrations
+    try:
+        run_migrations()
+    except Exception as e:
+        print(f"Warning: Failed to run migrations: {e}")
+    
     crud.engine = engine
+    
+    # Warm up the cache
+    try:
+        warm_cache_for_today_and_recent()
+        print("Cache warmed up successfully")
+    except Exception as e:
+        print(f"Warning: Failed to warm cache: {e}")
 
 
 @app.get("/api/daily")
 def get_daily(date: str = "", session: Session = Depends(get_session)):
-    # return the deterministic daily board for date (YYYY-MM-DD) or today
-    board = game.daily_board(date)
+    from .cache import get_cached_daily_board, cache_daily_board
+    
+    # Use provided date or default to today
+    actual_date = date or game.today_str()
+    
+    # Try to get from cache first
+    board = get_cached_daily_board(actual_date)
+    
+    if board is None:
+        # Generate and cache the board
+        board = game.daily_board(actual_date)
+        cache_daily_board(actual_date, board)
+    
     # Broadcast daily_update event (fire-and-forget)
     try:
         loop = asyncio.get_running_loop()
@@ -105,9 +226,59 @@ def get_daily(date: str = "", session: Session = Depends(get_session)):
     return {"board": board}
 
 
+class CompleteRequest(BaseModel):
+    username: str = Field(..., min_length=1, max_length=12)
+    seconds: int = Field(..., ge=0, le=86400)  # 0 to 24 hours
+    date: str = Field("", regex=r'^(\d{4}-\d{2}-\d{2})?$')  # Optional date or empty string
+    
+    @validator('username')
+    def validate_username(cls, v):
+        # Strip whitespace and sanitize
+        v = v.strip()
+        if len(v) == 0:
+            raise ValueError('Username cannot be empty')
+        if len(v) > 12:
+            raise ValueError('Username too long (max 12 characters)')
+        # Allow alphanumeric, underscore, hyphen only
+        import re
+        if not re.match(r'^[a-zA-Z0-9_-]+$', v):
+            raise ValueError('Username can only contain letters, numbers, underscore, and hyphen')
+        return v
+
+
 class PlayerCreate(BaseModel):
-    username: str
-    password: str
+    username: str = Field(..., min_length=1, max_length=12)
+    password: str = Field(..., min_length=8, max_length=128)
+    
+    @validator('username')
+    def validate_username(cls, v):
+        # Strip whitespace and sanitize
+        v = v.strip()
+        if len(v) == 0:
+            raise ValueError('Username cannot be empty')
+        if len(v) > 12:
+            raise ValueError('Username too long (max 12 characters)')
+        # Allow alphanumeric, underscore, hyphen only
+        import re
+        if not re.match(r'^[a-zA-Z0-9_-]+$', v):
+            raise ValueError('Username can only contain letters, numbers, underscore, and hyphen')
+        return v
+    
+    @validator('password')
+    def validate_password(cls, v):
+        if len(v) < 8:
+            raise ValueError('Password must be at least 8 characters long')
+        if len(v) > 128:
+            raise ValueError('Password too long (max 128 characters)')
+        # Basic password strength check
+        import re
+        if not re.search(r'[a-z]', v):
+            raise ValueError('Password must contain at least one lowercase letter')
+        if not re.search(r'[A-Z]', v):
+            raise ValueError('Password must contain at least one uppercase letter')
+        if not re.search(r'\d', v):
+            raise ValueError('Password must contain at least one number')
+        return v
 
 
 @app.post("/api/player_json", status_code=201)
@@ -119,40 +290,104 @@ def create_player_json(body: PlayerCreate, session: Session = Depends(get_sessio
 
 
 @app.get("/api/leaderboard")
-def leaderboard(date: str = "", limit: int = 10, session: Session = Depends(get_session)):
-    date = date or game.today_str()
-    board = crud.get_leaderboard(session, date, limit)
-    return {"date": date, "leaders": board}
-
-
-@app.get("/api/test_event")
-async def test_event():
-    """Test endpoint to trigger a broadcast event"""
-    print("Test event endpoint called")
-    try:
-        await broadcast_event({
-            'type': 'test',
-            'username': 'TestUser',
-            'msg': 'Test event from backend endpoint'
-        })
-        return {"status": "Event broadcast successful"}
-    except Exception as e:
-        print(f"Error broadcasting test event: {e}")
-        return {"status": f"Error: {e}"}
+def leaderboard(
+    date: str = "", 
+    limit: int = 10, 
+    session: Session = Depends(get_session),
+    _: None = Depends(rate_limit_dependency(max_requests=20, window_seconds=60))
+):
+    from .cache import get_cached_leaderboard, cache_leaderboard
+    
+    # Validate date parameter
+    if date and not re.match(r'^\d{4}-\d{2}-\d{2}$', date):
+        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+    
+    # Validate limit parameter
+    if limit < 1 or limit > 100:
+        raise HTTPException(status_code=400, detail="Limit must be between 1 and 100")
+    
+    actual_date = date or game.today_str()
+    
+    # Try to get from cache first
+    leaders = get_cached_leaderboard(actual_date)
+    
+    if leaders is None:
+        # Get from database and cache
+        leaders = crud.get_leaderboard(session, actual_date, limit)
+        cache_leaderboard(actual_date, leaders, ttl_minutes=5)  # Cache for 5 minutes
+    
+    return {"date": actual_date, "leaders": leaders}
 
 
 class SubmitSetRequest(BaseModel):
-    username: Optional[str]
-    indices: List[int]
+    username: Optional[str] = Field(None, max_length=12)
+    indices: List[int] = Field(..., min_items=3, max_items=3)
     date: Optional[str] = None
-    seconds: Optional[int] = None
-    session_id: Optional[str] = None
-    session_token: Optional[str] = None
+    seconds: Optional[int] = Field(None, ge=0, le=86400)  # 0 to 24 hours
+    session_id: Optional[str] = Field(None, max_length=100)
+    session_token: Optional[str] = Field(None, max_length=200)  # Increased for session_id.signature format
+    
+    @validator('username')
+    def validate_username(cls, v):
+        if v is not None:
+            # Strip whitespace and sanitize
+            v = v.strip()
+            if len(v) == 0:
+                return None
+            if len(v) > 12:
+                raise ValueError('Username too long (max 12 characters)')
+            # Allow alphanumeric, underscore, hyphen only
+            import re
+            if not re.match(r'^[a-zA-Z0-9_-]+$', v):
+                raise ValueError('Username can only contain letters, numbers, underscore, and hyphen')
+        return v
+    
+    @validator('date')
+    def validate_date(cls, v):
+        if v is not None and v != "":
+            import re
+            if not re.match(r'^\d{4}-\d{2}-\d{2}$', v):
+                raise ValueError('Date must be in YYYY-MM-DD format')
+        return v
+    
+    @validator('indices')
+    def validate_indices(cls, v):
+        if len(v) != 3:
+            raise ValueError('Must provide exactly 3 card indices')
+        for idx in v:
+            if not isinstance(idx, int) or idx < 0 or idx > 11:
+                raise ValueError('Card indices must be integers between 0 and 11')
+        if len(set(v)) != 3:
+            raise ValueError('All card indices must be unique')
+        return v
 
 
 class StartSessionRequest(BaseModel):
-    username: Optional[str] = None
+    username: Optional[str] = Field(None, max_length=12)
     date: Optional[str] = None
+    
+    @validator('username')
+    def validate_username(cls, v):
+        if v is not None:
+            # Strip whitespace and sanitize
+            v = v.strip()
+            if len(v) == 0:
+                return None
+            if len(v) > 12:
+                raise ValueError('Username too long (max 12 characters)')
+            # Allow alphanumeric, underscore, hyphen only
+            import re
+            if not re.match(r'^[a-zA-Z0-9_-]+$', v):
+                raise ValueError('Username can only contain letters, numbers, underscore, and hyphen')
+        return v
+    
+    @validator('date')
+    def validate_date(cls, v):
+        if v is not None and v != "":
+            import re
+            if not re.match(r'^\d{4}-\d{2}-\d{2}$', v):
+                raise ValueError('Date must be in YYYY-MM-DD format')
+        return v
 
 
 def _resolve_player_id(session: Session, username: Optional[str], request: Request) -> Optional[int]:
@@ -198,6 +433,13 @@ def start_session(body: StartSessionRequest, request: Request, response: Respons
     if not player_id:
         player_id = _create_player_and_set_cookie(session, body.username, response)
 
+    # If user has already completed today, forbid another session
+    try:
+        if player_id and crud.has_completed(session, player_id, date):
+            raise HTTPException(status_code=403, detail="Already completed today's game")
+    except Exception:
+        pass
+
     board = game.daily_board(date)
     gs = crud.create_session(session, player_id, date, board)
     start_ts = gs.start_ts.isoformat() if gs.start_ts is not None else None
@@ -207,6 +449,30 @@ def start_session(body: StartSessionRequest, request: Request, response: Respons
         # also set session_token cookie for convenience
         response.set_cookie('session_token', token or '', httponly=True, samesite='lax')
     return {"session_id": gs.id, "session_token": token, "start_ts": start_ts}
+
+
+@app.get("/api/status")
+def status(request: Request, session: Session = Depends(get_session)):
+    """Return minimal per-user status including whether today's daily is complete.
+
+    Uses player_token cookie if available; if no player is known, returns completed: False.
+    """
+    date = game.today_str()
+    player_id = _resolve_player_id(session, None, request)
+    completed = False
+    detail = None
+    if player_id:
+        try:
+            completed = crud.has_completed(session, player_id, date)
+            if completed:
+                detail = crud.get_player_daily_status(session, player_id, date)
+        except Exception:
+            completed = False
+            detail = None
+    payload = {"date": date, "completed": completed}
+    if detail:
+        payload.update(detail)
+    return payload
 
 
 @app.post("/api/rotate_session/{session_id}")
@@ -376,7 +642,11 @@ def _maybe_record_standalone(session: Session, body: SubmitSetRequest, date_loca
     crud.record_time(session, player_id_local, date_local, int(body.seconds))
 
 @app.post("/api/submit_set")
-def submit_set(body: SubmitSetRequest, session: Session = Depends(get_session)):
+def submit_set(
+    body: SubmitSetRequest, 
+    session: Session = Depends(get_session),
+    _: None = Depends(rate_limit_dependency(max_requests=10, window_seconds=60))
+):
     sid = _get_sid_from_body(body, session)
     gs, board, date = _load_session_board(session, body, sid)
     cards = _validate_and_get_cards(body, board)
@@ -386,29 +656,37 @@ def submit_set(body: SubmitSetRequest, session: Session = Depends(get_session)):
 
 
 @app.post("/api/player", status_code=201)
-def create_player(username: str, password: str, session: Session = Depends(get_session)):
-    p = crud.create_player(session, username, password)
+def create_player(
+    body: PlayerCreate,
+    session: Session = Depends(get_session),
+    _: None = Depends(rate_limit_dependency(max_requests=5, window_seconds=300))  # 5 accounts per 5 minutes
+):
+    p = crud.create_player(session, body.username, body.password)
     if not p:
         raise HTTPException(status_code=400, detail="username exists")
     return {"id": p.id, "username": p.username}
 
 
 @app.post("/api/complete")
-def complete_daily(username: str, seconds: int, date: str = "", session: Session = Depends(get_session)):
-    date = date or game.today_str()
-    p = crud.get_player_by_username(session, username)
+def complete_daily(
+    body: CompleteRequest,
+    session: Session = Depends(get_session),
+    _: None = Depends(rate_limit_dependency(max_requests=10, window_seconds=60))
+):
+    date = body.date or game.today_str()
+    p = crud.get_player_by_username(session, body.username)
     if not p:
         raise HTTPException(status_code=404, detail="player not found")
     player_id = p.id
     if player_id is None:
         raise HTTPException(status_code=500, detail="player has no id")
-    crud.record_time(session, player_id, date, seconds)
+    crud.record_time(session, player_id, date, body.seconds)
     try:
         _task = asyncio.create_task(broadcast_event({
             'type': 'completion',
             'player_id': player_id,
             'date': date,
-            'seconds': seconds,
+            'seconds': body.seconds,
         }))
     except Exception:
         pass

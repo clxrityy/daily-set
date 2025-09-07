@@ -1,6 +1,7 @@
-from sqlmodel import Session, create_engine, select as sqlmodel_select
+from sqlmodel import Session, create_engine, select as sqlmodel_select, col
 from passlib.context import CryptContext
 from . import models
+from datetime import datetime, timezone
 from sqlalchemy import func, select as sa_select
 import json
 from datetime import datetime, timedelta, timezone
@@ -33,6 +34,12 @@ def sign_player_token(db_session: Session, pid: int) -> Optional[str]:
     # simple HMAC of pid using global secret
     if pid is None:
         return None
+    # Utilize session: ensure the player exists before signing
+    try:
+        if db_session.get(models.Player, pid) is None:
+            return None
+    except Exception:
+        return None
     val = str(pid)
     sig = hmac.new(_SECRET.encode(), val.encode(), hashlib.sha256).hexdigest()
     return f"{val}.{sig}"
@@ -47,9 +54,16 @@ def verify_player_token(db_session: Session, token: str) -> Optional[int]:
     if not hmac.compare_digest(expected, sig):
         return None
     try:
-        return int(pid_s)
+        pid = int(pid_s)
     except Exception:
         return None
+    # Utilize session: ensure the player exists
+    try:
+        if db_session.get(models.Player, pid) is None:
+            return None
+    except Exception:
+        return None
+    return pid
 
 
 def create_anonymous_player(session: Session) -> models.Player:
@@ -101,9 +115,17 @@ def get_player_by_username(session: Session, username: str):
 
 
 def record_time(session: Session, player_id: int, date: str, seconds: int):
-    comp = models.Completion(player_id=player_id, date=date, seconds=seconds)
+    comp = models.Completion(player_id=player_id, date=date, seconds=seconds, completed_at=datetime.now(timezone.utc))
     session.add(comp)
     session.commit()
+    
+    # Invalidate leaderboard cache for this date
+    try:
+        from .cache import invalidate_leaderboard_cache
+        invalidate_leaderboard_cache(date)
+    except ImportError:
+        pass  # Cache module not available
+    
     return comp
 
 
@@ -157,15 +179,104 @@ def finish_session(session: Session, sid: str):
 
 
 def get_leaderboard(session: Session, date: str, limit: int = 10):
-    # return list of {username, best}
-    stmt = (
-        sa_select(models.Player.username, func.min(models.Completion.seconds).label('best'))
-        .join(models.Completion, models.Player.id == models.Completion.player_id)
+    """Return list of {username, best, completed_at} where completed_at corresponds to the best time.
+    If multiple completions share the same best seconds for a player, pick the earliest completed_at.
+    """
+    best_subq = (
+        sa_select(
+            col(models.Completion.player_id).label('pid'),
+            func.min(models.Completion.seconds).label('best')
+        )
         .where(models.Completion.date == date)
-        .group_by(models.Player.username)
-        .order_by(func.min(models.Completion.seconds))
+        .group_by(models.Completion.player_id)
+    ).subquery()
+
+    stmt = (
+        sa_select(
+            models.Player.username,
+            best_subq.c.best,
+            func.min(models.Completion.completed_at).label('completed_at')
+        )
+        .join(best_subq, models.Player.id == best_subq.c.pid)
+        .join(
+            models.Completion,
+            (models.Completion.player_id == best_subq.c.pid)
+            & (models.Completion.seconds == best_subq.c.best)
+            & (models.Completion.date == date)
+        )
+        .group_by(models.Player.username, best_subq.c.best)
+        .order_by(best_subq.c.best)
         .limit(limit)
     )
     res = session.execute(stmt)
     rows = res.fetchall()
-    return [{'username': r[0], 'best': int(r[1])} for r in rows]
+    leaders = []
+    for r in rows:
+        username = r[0]
+        best = int(r[1]) if r[1] is not None else None
+        completed_at = r[2]
+        leaders.append({
+            'username': username,
+            'best': best,
+            'completed_at': completed_at.isoformat() if completed_at else None,
+        })
+    return leaders
+
+
+def has_completed(session: Session, player_id: int, date: str) -> bool:
+    """Return True if the player has at least one completion for the given date."""
+    if player_id is None:
+        return False
+    row = session.exec(
+        sqlmodel_select(models.Completion.id)
+        .where(models.Completion.player_id == player_id)
+        .where(models.Completion.date == date)
+        .limit(1)
+    ).first()
+    return row is not None
+
+
+def get_player_daily_status(session: Session, player_id: int, date: str):
+    """Return dict with keys: seconds (best), completed_at (earliest for best), placement (1-indexed).
+    Returns None if the player has no completion for the date.
+    """
+    if player_id is None:
+        return None
+    # Best seconds for this player/date
+    best_val = session.execute(
+        sa_select(func.min(models.Completion.seconds))
+        .where(models.Completion.player_id == player_id)
+        .where(models.Completion.date == date)
+    ).scalar()
+    if best_val is None:
+        return None
+    best_secs = int(best_val)
+
+    # Placement: count how many players have a strictly better (lower) best time
+    best_subq = (
+        sa_select(
+            col(models.Completion.player_id).label('pid'),
+            func.min(models.Completion.seconds).label('best')
+        )
+        .where(models.Completion.date == date)
+        .group_by(models.Completion.player_id)
+    ).subquery()
+    better_count = session.execute(
+        sa_select(func.count())
+        .where(best_subq.c.best < best_secs)
+    ).scalar() or 0
+    placement = int(better_count) + 1
+
+    # Earliest completion timestamp for the best time
+    completed_at = session.execute(
+        sa_select(func.min(models.Completion.completed_at))
+        .where(models.Completion.player_id == player_id)
+        .where(models.Completion.date == date)
+        .where(models.Completion.seconds == best_secs)
+    ).scalar()
+
+    return {
+        'seconds': best_secs,
+        'completed_at': completed_at.isoformat() if completed_at else None,
+        'placement': placement,
+    }

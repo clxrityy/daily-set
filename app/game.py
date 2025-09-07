@@ -41,12 +41,27 @@ def daily_board(date: str = "", size: int = 12):
     seed = int(''.join([c for c in date if c.isdigit()]))
     rng = random.Random(seed)
     deck = all_cards()
+
+    def has_all_shapes(cards):
+        shapes_present = {c[0] for c in cards}
+        return all(s in shapes_present for s in SHAPES)
+
+    # keep shuffling deterministically until constraints are met
+    # constraints: at least one set exists AND all three shapes appear
+    board = None
     rng.shuffle(deck)
-    board = deck[:size]
-    # ensure at least one set present; if not, reshuffle a few times
-    for _ in range(10):
-        if find_sets(board):
+    for _ in range(200):  # cap attempts for safety; very fast in practice
+        candidate = deck[:size]
+        if find_sets(candidate) and has_all_shapes(candidate):
+            board = candidate
             break
         rng.shuffle(deck)
+    if board is None:
+        # fallback: ensure at least a set (original behavior)
         board = deck[:size]
+        for _ in range(10):
+            if find_sets(board):
+                break
+            rng.shuffle(deck)
+            board = deck[:size]
     return [list(card) for card in board]
