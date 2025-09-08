@@ -43,36 +43,14 @@
     --success-border: #bbf7d0;
 }
 
+/* Slightly smaller symbols in light theme for balance */
+[data-theme="light"] .mini-card .symbols svg {
+    width: 30px;
+    height: 30px;
+}
+
 [data-theme="dark"] {
     --bg: #0b1020;
-
-    /* Gallery of found sets rendered as SVG mini-cards */
-    .found-gallery {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        margin-top: 8px;
-    }
-
-    .set-row {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 8px;
-    }
-
-    .mini-card {
-        border: 1px solid var(--border);
-        border-radius: 8px;
-        background: var(--card-bg);
-        padding: 6px;
-        display: grid;
-        place-items: center;
-    }
-
-    .mini-card .symbols svg {
-        width: 34px;
-        height: 34px;
-    }
 
     --fg: #e5e7eb;
     --muted: #9ca3af;
@@ -84,6 +62,44 @@
     --success-bg: #052e1a;
     --success-fg: #86efac;
     --success-border: #14532d;
+}
+
+/* Gallery of found sets rendered as SVG mini-cards (apply to both themes) */
+.found-gallery {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.set-row {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.mini-card {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--card-bg);
+    padding: 6px;
+    display: grid;
+    place-items: center;
+    min-height: 56px;
+}
+
+.mini-card .symbols {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+}
+
+.mini-card .symbols svg {
+    width: 34px;
+    height: 34px;
+    max-width: 100%;
+    max-height: 100%;
 }
 
 html,
@@ -285,6 +301,10 @@ body.theme-vars .overlay-btn {
 
 .modal-body {
     padding: 12px 14px;
+}
+
+.modal-card .found-gallery {
+    margin-top: 6px;
 }
 
 /* Completed/success modal variant */
