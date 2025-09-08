@@ -1,9 +1,8 @@
-# Daily Set Game <img src="./app/static/favicon-32x32.png" />
+# <img src="./app/static/favicon-32x32.png" width="28" /> Daily Set Game
 
-[![Frontend CI](https://github.com/clxrityy/daily-set/actions/workflows/frontend.yml/badge.svg?branch=main)](https://github.com/clxrityy/daily-set/actions/workflows/frontend.yml)
-[![Backend CI](https://github.com/clxrityy/daily-set/actions/workflows/backend.yml/badge.svg?branch=main)](https://github.com/clxrityy/daily-set/actions/workflows/backend.yml)
-[![Frontend Coverage](https://codecov.io/gh/clxrityy/daily-set/branch/main/graph/badge.svg?flag=frontend)](https://codecov.io/gh/clxrityy/daily-set)
-[![Backend Coverage](https://codecov.io/gh/clxrityy/daily-set/branch/main/graph/badge.svg?flag=backend)](https://codecov.io/gh/clxrityy/daily-set)
+[![Backend CI](https://github.com/clxrityy/daily-set/actions/workflows/backend.yml/badge.svg?branch=main)](https://github.com/clxrityy/daily-set/actions/workflows/backend.yml)[![Backend Coverage](https://codecov.io/gh/clxrityy/daily-set/branch/main/graph/badge.svg?flag=backend)](https://codecov.io/gh/clxrityy/daily-set)
+
+[![Frontend CI](https://github.com/clxrityy/daily-set/actions/workflows/frontend.yml/badge.svg?branch=main)](https://github.com/clxrityy/daily-set/actions/workflows/frontend.yml)[![Frontend Coverage](https://codecov.io/gh/clxrityy/daily-set/branch/main/graph/badge.svg?flag=frontend)](https://codecov.io/gh/clxrityy/daily-set)
 
 > https://daily-set.fly.dev/
 
