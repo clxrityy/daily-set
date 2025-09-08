@@ -9,4 +9,6 @@ instance/
 .vscode/
 node_modules/
 *.db
-.idea
+.DS_Store
+*coverage/
+**/dist/
