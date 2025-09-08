@@ -8,6 +8,9 @@ from typing import Any, Optional, Dict, Tuple
 from datetime import datetime, timedelta
 import threading
 from dataclasses import dataclass
+from .logging_utils import get_logger
+
+logger = get_logger("app.cache")
 
 
 @dataclass
@@ -155,7 +158,7 @@ def cleanup_cache_periodically():
     """Cleanup function that can be called periodically"""
     expired_count = _cache.cleanup_expired()
     if expired_count > 0:
-        print(f"Cache cleanup: removed {expired_count} expired entries")
+        logger.info("cache_cleanup", extra={"removed": expired_count})
 
 
 # Cache warming functions

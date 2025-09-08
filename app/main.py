@@ -18,6 +18,9 @@ from sqlmodel import Session as SQLSession
 import json
 from datetime import datetime, timezone
 from starlette.middleware.base import BaseHTTPMiddleware
+from .logging_utils import setup_logging, get_logger, request_id_ctx
+import logging
+import uuid
 
 
 # Rate limiting - store last request times per IP
@@ -98,21 +101,20 @@ async def _send_to_websocket(ws: WebSocket, meta: dict, msg, ev, now_ts: float) 
         meta['last_sent'] = now_ts
         return True
     except Exception as send_exc:
-        print(f"Error sending to WebSocket: {send_exc}")  # Debug log
+        logger.debug("ws_send_error", extra={"error": str(send_exc)})
         return False
 
 async def broadcast_event(event: dict):
     """Enrich event with username/leaderboard, then broadcast to all connections."""
-    print(f"broadcast_event called with: {event}")  # Debug log
+    logger.debug("broadcast_event_called", extra={"event": event})
 
     # Enrich the event if applicable
     try:
         _enrich_event(event)
-    except Exception:
-        pass
+    except Exception as ex:
+        logger.debug("broadcast_event_enrich_failed", extra={"error": str(ex)})
 
-    print(f"Enriched event: {event}")  # Debug log
-    print(f"Number of WebSocket connections: {len(_WS_CONNECTIONS)}")  # Debug log
+    logger.debug("broadcast_event_enriched", extra={"event": event, "ws_count": len(_WS_CONNECTIONS)})
 
     json_message = _prepare_message(event)
     now = time.time()
@@ -128,6 +130,8 @@ async def broadcast_event(event: dict):
     for d in dead:
         _WS_CONNECTIONS.pop(d, None)
 
+setup_logging(logging.INFO)
+logger = get_logger("app")
 app = FastAPI(title="Daily Set")
 
 # Security headers & Content Security Policy
@@ -161,6 +165,49 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(SecurityHeadersMiddleware)
 
+
+class RequestLoggingMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        rid = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+        token = request_id_ctx.set(rid)
+        start = time.time()
+        client = request.client.host if request.client else "-"
+        ua = request.headers.get("user-agent", "-")
+        response = None
+        try:
+            response = await call_next(request)
+            return response
+        except Exception:
+            # Log exception with context
+            logger.exception(
+                "request_error",
+                extra={"path": str(request.url), "method": request.method},
+            )
+            raise
+        finally:
+            duration_ms = int((time.time() - start) * 1000)
+            status = getattr(response, "status_code", 500)
+            logger.info(
+                "request",
+                extra={
+                    "method": request.method,
+                    "path": request.url.path,
+                    "status": status,
+                    "duration_ms": duration_ms,
+                    "client": client,
+                    "user_agent": ua,
+                },
+            )
+            try:
+                if response is not None:
+                    response.headers["X-Request-ID"] = rid
+            except Exception:
+                pass
+            request_id_ctx.reset(token)
+
+
+app.add_middleware(RequestLoggingMiddleware)
+
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
@@ -188,7 +235,7 @@ app.add_middleware(
 # Add validation error handler for better debugging
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    print(f"Validation error on {request.method} {request.url}: {exc.errors()}")
+    logger.warning("validation_error", extra={"method": request.method, "url": str(request.url), "errors": exc.errors()})
     return JSONResponse(
         status_code=422,
         content={
@@ -283,16 +330,16 @@ def on_startup():
     try:
         run_migrations()
     except Exception as e:
-        print(f"Warning: Failed to run migrations: {e}")
+        logger.warning("migrations_failed", extra={"error": str(e)})
     
     crud.engine = engine
     
     # Warm up the cache
     try:
         warm_cache_for_today_and_recent()
-        print("Cache warmed up successfully")
+        logger.info("cache_warm_success")
     except Exception as e:
-        print(f"Warning: Failed to warm cache: {e}")
+        logger.warning("cache_warm_failed", extra={"error": str(e)})
 
 
 @app.get("/api/daily")
