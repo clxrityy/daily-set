@@ -1,17 +1,33 @@
 {
     "name": "Daily Set",
-    "short_name": "Daily Set",
-    "start_url": "/",
-    "scope": "/",
-    "display": "standalone",
-    "background_color": "#111827",
-    "theme_color": "#111827",
-    "description": "Play the daily Set puzzle online. Fast, accessible, mobile-friendly.",
+    "short_name": "Set",
     "icons": [
         {
-            "src": "/static/favicon.ico",
-            "sizes": "32x32 48x48 64x64",
-            "type": "image/x-icon"
+            "src": "/android-chrome-192x192.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "/android-chrome-512x512.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        },
+        {
+            "src": "/android-chrome-192x192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "maskable any"
+        },
+        {
+            "src": "/android-chrome-512x512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "maskable any"
         }
-    ]
+    ],
+    "theme_color": "#111827",
+    "background_color": "#f9fafb",
+    "display": "standalone",
+    "start_url": "/",
+    "scope": "/"
 }
