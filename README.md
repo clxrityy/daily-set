@@ -1,4 +1,4 @@
-# Daily Set Game
+# Daily Set Game <img src="./app/static/favicon-32x32.png" />
 
 [![Frontend CI](https://github.com/clxrityy/daily-set/actions/workflows/frontend.yml/badge.svg?branch=main)](https://github.com/clxrityy/daily-set/actions/workflows/frontend.yml)
 [![Backend CI](https://github.com/clxrityy/daily-set/actions/workflows/backend.yml/badge.svg?branch=main)](https://github.com/clxrityy/daily-set/actions/workflows/backend.yml)
