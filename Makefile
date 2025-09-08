@@ -47,10 +47,6 @@ test-frontend: frontend-install
 clean:
 	rm -rf $(VENV) set.db __pycache__ .pytest_cache
 
-dev:
-	make frontend-build
-	$(UVICORN) app.main:app --reload
-
 frontend-install:
 	cd frontend && npm install
 
@@ -59,6 +55,9 @@ frontend-dev:
 
 frontend-build:
 	cd frontend && npm run build
+
+dev: frontend-build
+	$(UVICORN) app.main:app --reload
 
 deploy: frontend-build
 	bash scripts/deploy.sh
