@@ -37,6 +37,8 @@ jobs:
         with:
           files: ./coverage.xml
           flags: backend
+          slug: clxrityy/daily-set
+          verbose: true
           fail_ci_if_error: true
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
@@ -62,7 +64,7 @@ jobs:
         run: npm ci
 
       - name: Run unit tests with coverage
-        run: npm run test -- --coverage --reporter=verbose
+        run: npm run test -- --reporter=verbose
 
       - name: Upload coverage to Codecov (frontend)
         uses: codecov/codecov-action@v4
@@ -70,6 +72,8 @@ jobs:
           directory: ./frontend
           files: ./frontend/coverage/lcov.info
           flags: frontend
+          slug: clxrityy/daily-set
+          verbose: true
           fail_ci_if_error: true
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
