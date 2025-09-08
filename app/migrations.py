@@ -124,6 +124,21 @@ def run_migrations():
             logger.info("Migration 003_add_completed_at already present (column exists); recorded as applied")
     
     logger.info("All migrations completed")
+    
+    # Migration 004: FoundSet table for tracking found sets
+    migration_004 = """
+    CREATE TABLE IF NOT EXISTS foundset (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        player_id INTEGER NOT NULL,
+        date TEXT NOT NULL,
+        cards_json TEXT NOT NULL,
+        session_id TEXT,
+        created_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_foundset_date ON foundset(date);
+    CREATE INDEX IF NOT EXISTS idx_foundset_player_date ON foundset(player_id, date);
+    """
+    apply_migration(engine, "004_foundset", migration_004)
 
 
 if __name__ == "__main__":

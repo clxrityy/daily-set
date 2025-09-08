@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import type { Leader, LeaderboardResponse } from '../lib/api'
-import { loadLeaderboard } from '../lib/api'
+import type { Leader, LeaderboardResponse, FoundSetsResponse } from '../lib/api'
+import { loadLeaderboard, loadFoundSets } from '../lib/api'
+import { FoundSetsGallery } from './FoundSetsGallery'
 
 export function Leaderboard({ date, limit = 10 }: { readonly date?: string; readonly limit?: number }) {
     const [data, setData] = useState<LeaderboardResponse | null>(null)
@@ -8,6 +9,10 @@ export function Leaderboard({ date, limit = 10 }: { readonly date?: string; read
     const [error, setError] = useState<string | null>(null)
     const refetchTimer = useRef<number | null>(null)
     const wsRetryTimer = useRef<number | null>(null)
+    const [selectedUser, setSelectedUser] = useState<string | null>(null)
+    const [userSets, setUserSets] = useState<FoundSetsResponse | null>(null)
+    const [userSetsError, setUserSetsError] = useState<string | null>(null)
+    const [userSetsLoading, setUserSetsLoading] = useState(false)
 
     const fetchNow = useCallback(() => {
         let cancelled = false
@@ -100,6 +105,21 @@ export function Leaderboard({ date, limit = 10 }: { readonly date?: string; read
         return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     }
 
+    const onClickUser = async (uname: string) => {
+        setSelectedUser(uname)
+        setUserSets(null)
+        setUserSetsError(null)
+        setUserSetsLoading(true)
+        try {
+            const res = await loadFoundSets({ username: uname, date: data.date })
+            setUserSets(res)
+        } catch (e: any) {
+            setUserSetsError(e?.detail || e?.message || 'Failed to load sets')
+        } finally {
+            setUserSetsLoading(false)
+        }
+    }
+
     return (
         <div className="leaderboard" aria-live="polite" {...(loading ? { 'aria-busy': 'true' } : {})}>
             <h2>Leaderboard — {data.date}</h2>
@@ -122,7 +142,15 @@ export function Leaderboard({ date, limit = 10 }: { readonly date?: string; read
                                 return (
                                     <tr key={`${l.username}-${i}`}>
                                         <td>{i + 1}</td>
-                                        <td>{l.username}</td>
+                                        <td>
+                                            <button
+                                                className="lb-user"
+                                                onClick={() => onClickUser(l.username)}
+                                                aria-label={`View sets found by ${l.username}`}
+                                            >
+                                                {l.username}
+                                            </button>
+                                        </td>
                                         <td>
                                             {fmt(l.best)} {tie && <span className="tie-badge" title="Same second as another score">tie</span>}
                                         </td>
@@ -132,6 +160,24 @@ export function Leaderboard({ date, limit = 10 }: { readonly date?: string; read
                             })}
                         </tbody>
                     </table>
+                    {selectedUser && (
+                        <div className="user-sets-panel" role="region" aria-live="polite" aria-label={`Sets found by ${selectedUser}`}>
+                            <div className="user-sets-header">
+                                <strong>{selectedUser}</strong>
+                                <button className="user-sets-close" onClick={() => { setSelectedUser(null); setUserSets(null) }} aria-label="Close">
+                                    ×
+                                </button>
+                            </div>
+                            {userSetsLoading && <div className="user-sets-loading">Loading sets…</div>}
+                            {userSetsError && <div className="user-sets-error">{userSetsError}</div>}
+                            {!!userSets?.sets?.length && (
+                                <FoundSetsGallery sets={userSets.sets} />
+                            )}
+                            {userSets && !userSets.sets?.length && !userSetsLoading && !userSetsError && (
+                                <div className="user-sets-empty">No sets recorded.</div>
+                            )}
+                        </div>
+                    )}
                 </div>
             )}
         </div>

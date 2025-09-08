@@ -27,3 +27,12 @@ class Completion(SQLModel, table=True):
     date: str  # YYYY-MM-DD
     seconds: int
     completed_at: Optional[datetime] = None
+
+
+class FoundSet(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    player_id: int
+    date: str  # YYYY-MM-DD
+    cards_json: str  # JSON array of three cards
+    session_id: Optional[str] = None
+    created_at: Optional[datetime] = None

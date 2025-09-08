@@ -14,6 +14,7 @@ export type SubmitResultErr = { ok: false; data: any; userFriendly?: boolean }
 export type SubmitResult = SubmitResultOk | SubmitResultErr
 export type Leader = { username: string; best: number; completed_at?: string | null }
 export type LeaderboardResponse = { date: string; leaders: Leader[] }
+export type FoundSetsResponse = { username: string; date: string; sets: Card[][] }
 
 export async function enhancedFetch(url: string, options: RequestInit & { timeout?: number } = {}) {
     const { timeout = 10000, ...fetchOptions } = options
@@ -59,6 +60,15 @@ export async function loadLeaderboard(params?: { date?: string; limit?: number }
     if (date) qs.set('date', date)
     if (typeof limit === 'number') qs.set('limit', String(limit))
     const url = qs.toString() ? `/api/leaderboard?${qs.toString()}` : '/api/leaderboard'
+    const res = await enhancedFetch(url)
+    return res.json()
+}
+
+export async function loadFoundSets(params: { username: string; date?: string }): Promise<FoundSetsResponse> {
+    const qs = new URLSearchParams()
+    qs.set('username', params.username)
+    if (params.date?.trim()) qs.set('date', params.date.trim())
+    const url = `/api/found_sets?${qs.toString()}`
     const res = await enhancedFetch(url)
     return res.json()
 }

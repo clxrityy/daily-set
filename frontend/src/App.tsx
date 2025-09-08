@@ -4,6 +4,9 @@ import { ToastProvider, useToasts } from './lib/errors'
 import { useGame } from './lib/game'
 import { Leaderboard } from './components/Leaderboard'
 import { loadStatus } from './lib/api'
+import { MenuTab } from './components/MenuTab'
+import { LeaderboardPanel } from './components/LeaderboardPanel'
+import { FoundSetsGallery } from './components/FoundSetsGallery'
 // import type { Card } from './lib/api'
 
 const SKELETON_KEYS: readonly string[] = Array.from({ length: 12 }, (_, i) => `s-${i}`)
@@ -12,13 +15,12 @@ const SKELETON_KEYS: readonly string[] = Array.from({ length: 12 }, (_, i) => `s
 // Set previews temporarily removed; can be re-enabled later.
 
 function InnerApp() {
-    const { board, load, selected, toggleSelect, submitSelected, start, startAt, cleared, complete, sessionId } = useGame()
+    const { board, load, selected, toggleSelect, submitSelected, start, startAt, cleared, complete, sessionId, foundSets } = useGame()
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [username, setUsername] = useState('')
     const [elapsed, setElapsed] = useState(0)
     const toasts = useToasts()
-    const [showLeaderboard, setShowLeaderboard] = useState(false)
     const [completedToday, setCompletedToday] = useState<boolean | null>(null)
     const [completedDetail, setCompletedDetail] = useState<{ seconds?: number; placement?: number; completed_at?: string | null } | null>(null)
     // Set previews temporarily removed
@@ -107,9 +109,6 @@ function InnerApp() {
                 {startAt ? (
                     <span id="timer" className="timer">{mm}:{ss}</span>
                 ) : null}
-                <button type="button" onClick={() => setShowLeaderboard((v) => !v)}>
-                    {showLeaderboard ? 'Hide Leaderboard' : 'Show Leaderboard'}
-                </button>
             </div>
 
             {/* Landing overlay: shown when page first loads and no active session */}
@@ -185,7 +184,7 @@ function InnerApp() {
                 </div>
             )}
 
-            {!loading && !error && board && startAt && (
+            {!loading && !error && board && startAt && !complete && (
                 <Board
                     board={board}
                     selected={selected}
@@ -199,18 +198,26 @@ function InnerApp() {
             {error && <div className="error">Error: {error}</div>}
 
             {complete && (
-                <div className="gameover">All sets found. Nice work!</div>
-            )}
-            {showLeaderboard && (
-                <Leaderboard limit={10} />
+                <div className="gameover">
+                    <div><strong>All sets found.</strong> Nice work!</div>
+                    {foundSets?.length ? (
+                        <>
+                            <div className="found-title">Sets found ({foundSets.length}):</div>
+                            <FoundSetsGallery sets={foundSets} />
+                        </>
+                    ) : null}
+                </div>
             )}
         </div>
     )
 }
 
 export default function App() {
+    const [lbOpen, setLbOpen] = useState(false)
     return (
         <ToastProvider>
+            <MenuTab onOpenLeaderboard={() => setLbOpen((v) => !v)} />
+            <LeaderboardPanel open={lbOpen} onClose={() => setLbOpen(false)} />
             <InnerApp />
         </ToastProvider>
     )

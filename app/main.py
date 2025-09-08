@@ -60,47 +60,71 @@ def rate_limit_dependency(max_requests: int = 30, window_seconds: int = 60):
 _WS_CONNECTIONS: dict = {}
 
 
-async def broadcast_event(event: dict):
-    """Enrich event with username and leaderboard snapshot, then send to connected clients with simple per-connection rate limiting."""
-    print(f"broadcast_event called with: {event}")  # Debug log
-    
-    # enrich event if it contains player_id and date
+# Helper functions for broadcast_event
+def _enrich_event(e: dict) -> None:
+    """Enrich completion event with username and leaderboard data."""
+    if not (e.get('type') == 'completion' and 'player_id' in e and 'date' in e):
+        return
+    leaders = []
+    uname = None
     try:
-        if event.get('type') == 'completion' and 'player_id' in event and 'date' in event:
-            # lookup username and top leaders
-            leaders = []
-            uname = None
-            try:
-                with SQLSession(crud.engine) as s:
-                    user = s.get(models.Player, event['player_id'])
-                    if user:
-                        uname = user.username
-                    leaders = crud.get_leaderboard(s, event['date'], limit=5)
-            except Exception:
-                leaders = []
-            event['username'] = uname
-            event['leaders'] = leaders
+        with SQLSession(crud.engine) as s:
+            user = s.get(models.Player, e['player_id'])
+            if user:
+                uname = user.username
+            leaders = crud.get_leaderboard(s, e['date'], limit=5)
+    except Exception:
+        leaders = []
+    e['username'] = uname
+    e['leaders'] = leaders
+
+def _prepare_message(e: dict):
+    """Serialize event to JSON."""
+    try:
+        return json.dumps(e)
+    except Exception:
+        return None
+
+async def _send_to_websocket(ws: WebSocket, meta: dict, msg, ev, now_ts: float) -> bool:
+    """Send message to websocket with rate limiting. Return False if failed."""
+    try:
+        last = meta.get('last_sent', 0)
+        if now_ts - last < 0.45:
+            return True
+        if msg is not None:
+            await ws.send_text(msg)
+        else:
+            await ws.send_json(ev)
+        meta['last_sent'] = now_ts
+        return True
+    except Exception as send_exc:
+        print(f"Error sending to WebSocket: {send_exc}")  # Debug log
+        return False
+
+async def broadcast_event(event: dict):
+    """Enrich event with username/leaderboard, then broadcast to all connections."""
+    print(f"broadcast_event called with: {event}")  # Debug log
+
+    # Enrich the event if applicable
+    try:
+        _enrich_event(event)
     except Exception:
         pass
 
     print(f"Enriched event: {event}")  # Debug log
     print(f"Number of WebSocket connections: {len(_WS_CONNECTIONS)}")  # Debug log
 
+    json_message = _prepare_message(event)
     now = time.time()
     dead = []
+
+    # Process each connection
     for ws, meta in _WS_CONNECTIONS.items():
-        try:
-            # rate limit per-connection to ~2 messages/sec
-            last = meta.get('last_sent', 0)
-            if now - last < 0.45:
-                print("Rate limiting WebSocket message")  # Debug log
-                continue
-            print(f"Sending event to WebSocket: {event}")  # Debug log
-            await ws.send_json(event)
-            meta['last_sent'] = now
-        except Exception as e:
-            print(f"Error sending to WebSocket: {e}")  # Debug log
+        success = await _send_to_websocket(ws, meta, json_message, event, now)
+        if not success:
             dead.append(ws)
+
+    # Clean up disconnected sockets
     for d in dead:
         _WS_CONNECTIONS.pop(d, None)
 
@@ -235,7 +259,22 @@ def on_startup():
     from .cache import warm_cache_for_today_and_recent
     
     db_path = os.getenv("DATABASE_URL", "sqlite:///./set.db")
-    engine = create_engine(db_path, echo=False, connect_args={"check_same_thread": False})
+    # Enable connection pooling for non-SQLite databases; keep SQLite thread setting
+    connect_args = {"check_same_thread": False} if db_path.startswith("sqlite") else {}
+    # Use explicit keyword args instead of **pool_kwargs to avoid mypy/typing mismatches
+    if not db_path.startswith("sqlite"):
+        # Reasonable defaults for pooled connections in production databases
+        engine = create_engine(
+            db_path,
+            echo=False,
+            connect_args=connect_args,
+            pool_pre_ping=True,
+            pool_size=10,
+            max_overflow=20,
+            pool_recycle=1800,
+        )
+    else:
+        engine = create_engine(db_path, echo=False, connect_args=connect_args)
     
     # Create tables first
     SQLModel.metadata.create_all(engine)
@@ -376,6 +415,66 @@ def leaderboard(
     return {"date": actual_date, "leaders": leaders}
 
 
+def _validate_username_param(username: str) -> str:
+    uname = (username or "").strip()
+    if not uname or len(uname) > 64:
+        raise HTTPException(status_code=400, detail="Invalid username")
+    if not re.match(r'^[A-Za-z0-9_-]+$', uname):
+        raise HTTPException(status_code=400, detail="Invalid username format")
+    return uname
+
+
+def _validate_date_param(date: str) -> str:
+    if date and not re.match(r'^\d{4}-\d{2}-\d{2}$', date):
+        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+    return date or game.today_str()
+
+
+def _query_found_sets(session: SQLSession, player_id: int, date_str: str) -> list:
+    sets: list = []
+    rows = session.exec(
+        select(models.FoundSet)
+        .where(models.FoundSet.player_id == player_id)
+        .where(models.FoundSet.date == date_str)
+        .order_by(models.FoundSet.created_at)
+    ).all()
+    for fs in rows:
+        try:
+            cards = json.loads(fs.cards_json)
+            if isinstance(cards, list) and len(cards) == 3:
+                sets.append(cards)
+        except Exception:
+            continue
+    return sets
+
+
+@app.get("/api/found_sets")
+def get_found_sets(
+    username: str,
+    date: str = "",
+    session: Session = Depends(get_session),
+    _: None = Depends(rate_limit_dependency(max_requests=30, window_seconds=60))
+):
+    """Return the list of found sets (arrays of 3 cards) for the given username and date.
+    If user or records are not found, returns an empty list.
+    """
+    # sanitize username similar to validators
+    uname = _validate_username_param(username)
+    actual_date = _validate_date_param(date)
+
+    # Lookup player
+    player = crud.get_player_by_username(session, uname)
+    if not player or player.id is None:
+        return {"username": uname, "date": actual_date, "sets": []}
+
+    # Fetch found sets in ascending time
+    try:
+        sets = _query_found_sets(session, player.id, actual_date)
+    except Exception:
+        sets = []
+    return {"username": uname, "date": actual_date, "sets": sets}
+
+
 class SubmitSetRequest(BaseModel):
     username: Optional[str] = Field(None, max_length=12)
     indices: List[int] = Field(..., min_items=3, max_items=3)
@@ -412,8 +511,8 @@ class SubmitSetRequest(BaseModel):
         if len(v) != 3:
             raise ValueError('Must provide exactly 3 card indices')
         for idx in v:
-            if not isinstance(idx, int) or idx < 0 or idx > 11:
-                raise ValueError('Card indices must be integers between 0 and 11')
+            if not isinstance(idx, int) or idx < 0:
+                raise ValueError('Card indices must be non-negative integers')
         if len(set(v)) != 3:
             raise ValueError('All card indices must be unique')
         return v
@@ -720,9 +819,29 @@ def _apply_session_changes(session: Session, body: SubmitSetRequest, gs_local, b
         return
     # remove selected cards from stored board
     b_local = board_local
+    # Capture selected cards BEFORE mutating the board
+    try:
+        selected_cards = [b_local[i] for i in body.indices]
+    except Exception:
+        selected_cards = None
     for i in sorted(body.indices, reverse=True):
         b_local.pop(i)
     gs_local.board_json = json.dumps(b_local)
+
+    # Record the found set for analytics/history
+    try:
+        if getattr(gs_local, 'player_id', None):
+            cards_payload = json.dumps(selected_cards or [])
+            fs = models.FoundSet(
+                player_id=gs_local.player_id or 0,
+                date=gs_local.date,
+                cards_json=cards_payload,
+                session_id=gs_local.id,
+                created_at=datetime.now(timezone.utc)
+            )
+            session.add(fs)
+    except Exception:
+        pass
 
     # Check if game is complete (no more valid sets remaining)
     remaining_sets = game.find_sets([tuple(card) for card in b_local])

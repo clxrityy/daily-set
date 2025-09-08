@@ -227,51 +227,63 @@ export function useGame() {
         })
     }, [cleared])
 
+    // Helpers to keep submitSelected simple
+    const computeSeconds = (startedAt: number | null): number | null => {
+        if (typeof startedAt !== 'number') return null
+        const delta = Math.floor((Date.now() - startedAt) / 1000)
+        return Number.isFinite(delta) ? Math.max(0, delta) : null
+    }
+
+    const buildPayload = (
+        indices: number[],
+        sessionIdValue: string | null,
+        sessionTokenValue: string | null,
+        secs: number | null,
+    ) => {
+        const payload: any = { indices }
+        if (sessionIdValue) {
+            payload.session_id = sessionIdValue
+            payload.session_token = sessionTokenValue
+            if (secs !== null) payload.seconds = secs
+        }
+        return payload
+    }
+
+    const applySetState = (indices: number[], hasSession: boolean) => {
+        const sorted = [...indices].sort((a, b) => b - a)
+        if (hasSession) {
+            setBoard((b) => {
+                const copy = [...b]
+                for (const idx of sorted) copy.splice(idx, 1)
+                return copy
+            })
+        } else {
+            setCleared((prev) => new Set([...prev, ...indices]))
+        }
+        setSelected([])
+    }
+
     const submitSelected = useCallback(async (): Promise<SubmitResult | { ok: false; reason: 'need-3' }> => {
         if (selected.length !== 3) return { ok: false as const, reason: 'need-3' }
-        // Client-side validation to avoid false 400s due to index drift
         const [i, j, k] = selected as [number, number, number]
         const a = board[i]
         const b = board[j]
         const c = board[k]
-        if (!a || !b || !c || !isValidSet(a, b, c)) {
+        // Client-side validation
+        const valid = !!a && !!b && !!c && isValidSet(a, b, c)
+        if (!valid) {
             return { ok: false as const, data: { detail: 'Not a set (client check)' }, userFriendly: true } as SubmitResult
         }
-        // Compute seconds safely; never send negative or NaN; omit if not valid or no session
-        let secs: number | null = null
-        if (typeof startAt === 'number') {
-            const delta = Math.floor((Date.now() - startAt) / 1000)
-            if (Number.isFinite(delta)) secs = Math.max(0, delta)
-        }
-        const payload: any = { indices: selected }
-        if (sessionId) {
-            payload.session_id = sessionId
-            payload.session_token = sessionToken
-            if (secs !== null) payload.seconds = secs
-        }
+        const secs = computeSeconds(startAt)
+        const payload = buildPayload(selected, sessionId, sessionToken, secs)
         const res = await submitSet(payload)
-        // Hint for users if session wasn't started
         if (!res.ok && !sessionId) {
             (res as any).userFriendly = true
                 ; (res as any).data = { detail: 'Tip: click Start Game to keep server and client boards in sync.' }
         }
         if (res.ok) {
-            // Capture the found set for later display
-            if (a && b && c) {
-                setFoundSets((prev) => [...prev, [a, b, c]])
-            }
-            const sorted = [...selected].sort((a, b) => b - a)
-            if (sessionId) {
-                setBoard((b) => {
-                    const copy = [...b]
-                    for (const idx of sorted) copy.splice(idx, 1)
-                    return copy
-                })
-            } else {
-                // No session: flip these cards to a "cleared" back state
-                setCleared((prev) => new Set([...prev, ...selected]))
-            }
-            setSelected([])
+            setFoundSets((prev) => [...prev, [a, b, c]])
+            applySetState(selected, !!sessionId)
         }
         return res
     }, [selected, startAt, sessionId, sessionToken, board])
@@ -313,5 +325,5 @@ export function useGame() {
         }
     }, [complete, foundSets, startAt, board])
 
-    return { board, setBoard, load, selected, setSelected, toggleSelect, submitSelected, start, startAt, complete, cleared, sessionId }
+    return { board, setBoard, load, selected, setSelected, toggleSelect, submitSelected, start, startAt, complete, cleared, sessionId, foundSets }
 }
