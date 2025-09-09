@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { startSession as apiStart, submitSet, loadActiveSession } from './api'
 import type { Card, SubmitResult } from './api'
 
@@ -129,9 +129,27 @@ export function useGame() {
     }, [sessionToken, foundSets])
 
     // Helper function to load and process server-side session
+    // Debounce state to avoid spamming /api/session across rapid re-renders
+    const pendingLoadRef = useRef<Promise<any> | null>(null)
+    const lastLoadTsRef = useRef<number>(0)
+
     const loadServerSession = useCallback(async (savedStartAt: number | null): Promise<boolean> => {
         try {
-            const s = await loadActiveSession()
+            const nowTs = Date.now()
+            if (pendingLoadRef.current) {
+                // Reuse the in-flight request
+                const s = await pendingLoadRef.current
+                return !!(s?.active && Array.isArray(s.board))
+            }
+            if (nowTs - lastLoadTsRef.current < 200) {
+                // Too soon since last successful call; skip
+                return false
+            }
+            const p = loadActiveSession()
+            pendingLoadRef.current = p
+            const s = await p
+            pendingLoadRef.current = null
+            lastLoadTsRef.current = Date.now()
             if (!s?.active || !s.board || !Array.isArray(s.board)) return false;
 
             setBoard(s.board)
@@ -153,7 +171,7 @@ export function useGame() {
 
             persistSessionData(s.board, effectiveStart, s.session_id || null)
             return true
-        } catch { /* ignore */ }
+        } catch { /* ignore */ pendingLoadRef.current = null }
         return false
     }, [persistSessionData])
 
@@ -180,6 +198,10 @@ export function useGame() {
         const safe = raw.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 12)
         const name = safe || randomUsername()
         const res = await apiStart(name)
+        // Persist last used username for future prefill
+        try {
+            localStorage.setItem('ds_last_username', name)
+        } catch { /* ignore */ }
         setSessionId(res.session_id ?? null)
         setSessionToken(res.session_token ?? null)
         const parsedServerStart = res?.start_ts ? Date.parse(res.start_ts) : NaN

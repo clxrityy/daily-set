@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Board } from './components/Board'
 import { ToastProvider, useToasts } from './lib/errors'
 import { useGame } from './lib/game'
@@ -18,7 +18,20 @@ function InnerApp() {
     const { board, load, selected, toggleSelect, submitSelected, start, startAt, cleared, complete, sessionId, foundSets } = useGame()
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
-    const [username, setUsername] = useState('')
+    const [username, setUsername] = useState(() => {
+        try {
+            const v = localStorage.getItem('ds_last_username')
+            if (v) return v
+            const snap = localStorage.getItem('ds_session_v1')
+            if (snap) {
+                const parsed = JSON.parse(snap)
+                if (parsed?.username && typeof parsed.username === 'string') {
+                    return String(parsed.username)
+                }
+            }
+        } catch { /* ignore */ }
+        return ''
+    })
     const [elapsed, setElapsed] = useState(0)
     const toasts = useToasts()
     const [completedToday, setCompletedToday] = useState<boolean | null>(null)
@@ -37,13 +50,16 @@ function InnerApp() {
     }), [])
 
     // Initial load: attempt restore only; do not fetch daily board until started
+    // Use a ref to avoid re-running when the load callback identity changes.
+    const loadRef = useRef(load)
+    useEffect(() => { loadRef.current = load }, [load])
     useEffect(() => {
         let alive = true
-        load()
+        loadRef.current()
             .catch((e) => { if (alive) setError(String(e)) })
             .finally(() => { if (alive) setLoading(false) })
         return () => { alive = false }
-    }, [load])
+    }, [])
 
     // Load completion status
     useEffect(() => {
