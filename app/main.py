@@ -949,13 +949,22 @@ def complete_daily(
     if player_id is None:
         raise HTTPException(status_code=500, detail="player has no id")
     crud.record_time(session, player_id, date, body.seconds)
+    # Fire-and-forget broadcast only if an event loop is running.
+    # Avoid creating the coroutine if create_task would fail (which would trigger
+    # a "coroutine was never awaited" warning under sync request handlers in tests).
     try:
-        _task = asyncio.create_task(broadcast_event({
-            'type': 'completion',
-            'player_id': player_id,
-            'date': date,
-            'seconds': body.seconds,
-        }))
-    except Exception:
-        pass
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+    if loop is not None:
+        try:
+            loop.create_task(broadcast_event({
+                'type': 'completion',
+                'player_id': player_id,
+                'date': date,
+                'seconds': body.seconds,
+            }))
+        except Exception:
+            # If scheduling fails for any reason, continue without blocking the request
+            pass
     return {"status": "ok"}
