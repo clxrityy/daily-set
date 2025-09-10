@@ -2,6 +2,8 @@
 
 [![Backend CI](https://github.com/clxrityy/daily-set/actions/workflows/backend.yml/badge.svg?branch=main)](https://github.com/clxrityy/daily-set/actions/workflows/backend.yml)[![Backend Coverage](https://codecov.io/gh/clxrityy/daily-set/branch/main/graph/badge.svg?flag=backend)](https://codecov.io/gh/clxrityy/daily-set)
 
+[![Realtime CI](https://github.com/clxrityy/daily-set/actions/workflows/realtime.yml/badge.svg?branch=main)](https://github.com/clxrityy/daily-set/actions/workflows/realtime.yml)[![Realtime Coverage](https://codecov.io/gh/clxrityy/daily-set/branch/main/graph/badge.svg?flag=realtime)](https://codecov.io/gh/clxrityy/daily-set)
+
 [![Frontend CI](https://github.com/clxrityy/daily-set/actions/workflows/frontend.yml/badge.svg?branch=main)](https://github.com/clxrityy/daily-set/actions/workflows/frontend.yml)[![Frontend Coverage](https://codecov.io/gh/clxrityy/daily-set/branch/main/graph/badge.svg?flag=frontend)](https://codecov.io/gh/clxrityy/daily-set)
 
 A web application for playing the card game "Set" online.
