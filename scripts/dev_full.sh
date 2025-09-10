@@ -32,11 +32,11 @@ bash scripts/kill_port.sh
 
 (
   cd realtime
-  REALTIME_ADDR=":8081" go run . 2>&1 &
+  REALTIME_ADDR=":8081" NATS_URL="nats://127.0.0.1:4222" go run . 2>&1 &
 )
 
 (
-  .venv/bin/uvicorn app.main:app --reload --host 127.0.0.1 --port 8000 2>&1 &
+  NATS_URL="nats://127.0.0.1:4222" .venv/bin/uvicorn app.main:app --reload --host 127.0.0.1 --port 8000 2>&1 &
 )
 
 wait
