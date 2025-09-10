@@ -32,7 +32,8 @@ def find_sets(board):
 
 
 def today_str():
-    return datetime.date.today().isoformat()
+    # Use UTC date to ensure the daily boundary is consistent globally
+    return datetime.datetime.now(datetime.timezone.utc).date().isoformat()
 
 
 def daily_board(date: str = "", size: int = 12):
