@@ -106,35 +106,114 @@ body {
     position: fixed;
     left: 0;
     right: 0;
-    bottom: 12px;
-    /* slight offset from edge for comfort */
-    display: flex;
-    align-items: center;
-    justify-content: flex-start;
+    bottom: 0;
+    /* make the footer bar span full width at the very bottom */
+    display: block;
     z-index: 9999;
     /* above overlays */
     pointer-events: auto;
     /* ensure clicks pass to footer */
     padding-bottom: env(safe-area-inset-bottom, 0px);
-    /* avoid iOS home indicator */
-    padding-left: max(12px, env(safe-area-inset-left, 0px));
 }
 
-.app-footer .menu-btn {
+/* Unique footer bar container */
+.app-footer .footer-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    /* bar spanning the width */
+    width: 100%;
+    box-sizing: border-box;
+    padding: 8px 12px;
+    padding-left: max(12px, env(safe-area-inset-left, 0px));
+    padding-right: max(12px, env(safe-area-inset-right, 0px));
+    background: rgba(127, 127, 127, 0.08);
+    border-top: 1px solid rgba(127, 127, 127, 0.2);
+    /* optional glassy touch */
+    -webkit-backdrop-filter: saturate(120%) blur(6px);
+    backdrop-filter: saturate(120%) blur(6px);
+}
+
+.app-footer .footer-left,
+.app-footer .footer-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.app-footer .menu-btn,
+.app-footer .footer-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 44px;
-    height: 44px;
+    width: 36px;
+    height: 36px;
     border-radius: 9999px;
     color: inherit;
     /* theme-aware via currentColor */
     text-decoration: none;
 }
 
-.app-footer .menu-btn svg {
-    width: 22px;
-    height: 22px;
+.app-footer .menu-btn svg,
+.app-footer .footer-btn svg {
+    width: 18px;
+    height: 18px;
+}
+
+/* brand link, with small logo and unique title font treatment */
+.app-footer .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: inherit;
+    text-decoration: none;
+}
+
+.app-footer .brand-logo {
+    width: 18px;
+    height: 18px;
+    image-rendering: -webkit-optimize-contrast;
+    /* original is white; invert on light theme, keep white on dark */
+    filter: none;
+}
+
+/* Respect explicit theme toggle via data-theme */
+[data-theme="light"] .app-footer .brand-logo {
+    filter: invert(1) brightness(0.1);
+}
+
+[data-theme="dark"] .app-footer .brand-logo {
+    filter: none;
+}
+
+.app-footer .brand-title {
+    font-size: 0.9rem;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    /* Rounded-first stack plus system fallbacks */
+    font-family: "SF Pro Rounded", "SF Rounded", "Avenir Next Rounded", "Segoe UI Rounded", ui-rounded, "Nunito", "Poppins", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    /* Gradient text for a distinct brand feel */
+    background: linear-gradient(90deg, #d3d3d3 0%, #c5c5c5 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}
+
+/* Improve contrast by theme */
+[data-theme="light"] .app-footer .brand-title {
+    background: linear-gradient(90deg, #1f2937 0%, #4b5563 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}
+
+[data-theme="dark"] .app-footer .brand-title {
+    background: linear-gradient(90deg, #f3f4f6 0%, #a3a3a3 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
 }
 
 /* board container should wrap cards and remain responsive and centered */

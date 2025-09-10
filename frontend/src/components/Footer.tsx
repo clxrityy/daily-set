@@ -12,16 +12,26 @@ function GithubIcon() {
 export function Footer() {
     return (
         <footer className="app-footer" role="contentinfo">
-            <a
-                className="menu-btn"
-                href="https://github.com/clxrityy/daily-set"
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="Open GitHub repository"
-                title="GitHub"
-            >
-                <GithubIcon />
-            </a>
+            <div className="footer-bar">
+                <div className="footer-left">
+                    <a className="brand" href="/" aria-label="Daily Set home" title="Daily Set">
+                        <img className="brand-logo" src="/static/favicon-32x32.png" alt="Logo" />
+                        <span className="brand-title">Daily Set</span>
+                    </a>
+                </div>
+                <div className="footer-right">
+                    <a
+                        className="footer-btn"
+                        href="https://github.com/clxrityy/daily-set"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label="Open GitHub repository"
+                        title="GitHub"
+                    >
+                        <GithubIcon />
+                    </a>
+                </div>
+            </div>
         </footer>
     )
 }
