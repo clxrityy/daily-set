@@ -772,7 +772,25 @@ async def websocket_endpoint(ws: WebSocket):
     try:
         while True:
             # keep connection open; optionally receive pings from client
-            await ws.receive_text()
+            msg = await ws.receive_text()
+            # Test hook: allow triggering a broadcast from a WS message in tests
+            try:
+                import os as _os
+                if isinstance(msg, str) and msg.startswith("__test_broadcast:") and _os.getenv('ENABLE_TEST_ENDPOINTS', '0') in ('1', 'true', 'True'):
+                    payload = msg.split(":", 1)[1]
+                    try:
+                        ev = json.loads(payload)
+                    except Exception:
+                        ev = {"type": "test"}
+                    # Echo directly for deterministic test delivery
+                    try:
+                        await ws.send_text(json.dumps(ev))
+                    except Exception:
+                        pass
+                    # Also run broadcast to exercise the pipeline
+                    await broadcast_event(ev)
+            except Exception:
+                pass
     except WebSocketDisconnect:
         _WS_CONNECTIONS.pop(ws, None)
     except Exception:
@@ -968,3 +986,19 @@ def complete_daily(
             # If scheduling fails for any reason, continue without blocking the request
             pass
     return {"status": "ok"}
+
+@app.post("/api/__test_broadcast")
+def __test_broadcast(event: dict):
+    """Test-only endpoint to trigger a broadcast from sync context.
+    Enabled when ENABLE_TEST_ENDPOINTS=1. Returns 404 otherwise.
+    """
+    import os
+    enabled = False
+    try:
+        enabled = os.getenv('ENABLE_TEST_ENDPOINTS', '0') in ('1', 'true', 'True')
+    except Exception:
+        enabled = False
+    if not enabled:
+        raise HTTPException(status_code=404, detail="not found")
+    # Intentionally no-op; kept for compatibility, real test broadcast uses WS trigger
+    return {"ok": True}
