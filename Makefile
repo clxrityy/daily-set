@@ -39,13 +39,16 @@ run: install
 run-dev: install
 	$(UVICORN) app.main:app --reload
 
-test: test-backend test-frontend
+test: test-backend test-frontend test-realtime
 
 test-backend: install
 	$(PYTEST)
 
 test-frontend: frontend-install
 	cd frontend && npm test
+
+test-realtime:
+	cd realtime && go test
 
 clean:
 	rm -rf $(VENV) set.db __pycache__ .pytest_cache
