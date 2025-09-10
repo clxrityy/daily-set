@@ -37,11 +37,6 @@ flowchart TD
     B <--> D(Realtime Gateway)
     D <--> E[[NATS Server]]
     E <--> B
-    style A fill:#f1f1f1,stroke:#333,stroke-width:2px
-    style B fill:#dddddd,stroke:#333,stroke-width:2px
-    style C fill:#bbbbbb,stroke:#333,stroke-width:2px
-    style D fill:#fffeee,stroke:#333,stroke-width:2px
-    style E fill:#aaaaaa,stroke:#333,stroke-width:2px
 ```
 
 <details>
