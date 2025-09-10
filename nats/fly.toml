@@ -1,0 +1,32 @@
+app = "daily-set-nats"
+primary_region = "iad"
+
+# Use the official NATS image. ENTRYPOINT is nats-server.
+[build]
+image = "nats:2.10-alpine"
+
+# Persist JetStream storage to a Fly volume mounted at /data
+[[mounts]]
+destination = "/data"
+source = "nats_data"
+
+# Run nats-server with JetStream enabled and monitoring on 8222.
+[processes]
+app = "-js -sd /data -m 8222"
+
+# Internal-only TCP service for NATS clients on 4222.
+[[services]]
+internal_port = 4222
+processes = ["app"]
+protocol = "tcp"
+
+# Optional: expose monitoring UI internally only (no public ports).
+[[services]]
+internal_port = 8222
+processes = ["app"]
+protocol = "tcp"
+
+[[vm]]
+cpu_kind = "shared"
+cpus = 1
+memory = "256mb"
