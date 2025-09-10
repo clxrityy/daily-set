@@ -29,7 +29,7 @@ export function LeaderboardPanel({ open, onClose }: { readonly open: boolean; re
                     <button type='button' className={`side-tab${tab === 'monthly' ? ' active' : ''}`} onClick={() => setTab('monthly')}>Monthly</button>
                 </div>
                 <div className="side-body">
-                    {tab === 'daily' && <Leaderboard limit={25} />}
+                    {tab === 'daily' && <Leaderboard limit={25} realtime={true} />}
                     {tab === 'weekly' && <div className="coming-soon">Weekly leaderboard coming soon…</div>}
                     {tab === 'monthly' && <div className="coming-soon">Monthly leaderboard coming soon…</div>}
                 </div>
@@ -37,3 +37,5 @@ export function LeaderboardPanel({ open, onClose }: { readonly open: boolean; re
         </>
     )
 }
+
+export default LeaderboardPanel
