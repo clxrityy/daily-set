@@ -122,6 +122,135 @@ func validateJWT(tokenStr, secret string) (string, error) {
 	return "", errors.New("missing subject")
 }
 
+// extractToken extracts the JWT token from the request
+func extractToken(r *http.Request) string {
+	token := ""
+	if auth := r.Header.Get("Authorization"); strings.HasPrefix(strings.ToLower(auth), "bearer ") {
+		token = strings.TrimSpace(auth[7:])
+	}
+	if token == "" {
+		token = r.URL.Query().Get("token")
+	}
+	return token
+}
+
+// handleClientMessages processes incoming messages from a client
+func (s *RealtimeServer) handleClientMessages(ctx context.Context, client *Client) {
+	for {
+		var env Envelope
+		if err := wsjson.Read(ctx, client.conn, &env); err != nil {
+			log.Printf("read error: %v", err)
+			break
+		}
+
+		// Set defaults for missing values
+		if env.V == 0 {
+			env.V = 1
+		}
+		if env.ID == "" {
+			env.ID = randomID()
+		}
+		if env.TS.IsZero() {
+			env.TS = time.Now().UTC()
+		}
+
+		if !s.processMessage(ctx, client, &env) {
+			break
+		}
+	}
+
+	// connection closed - cleanup
+	s.leaveAll(client)
+	_ = client.conn.Close(ws.StatusNormalClosure, "bye")
+}
+
+// processMessage handles different message types
+func (s *RealtimeServer) processMessage(ctx context.Context, client *Client, env *Envelope) bool {
+	switch env.Type {
+	case "ping":
+		_ = client.send(ctx, Envelope{V: 1, Type: "pong", ID: env.ID, TS: time.Now().UTC()})
+	case "subscribe":
+		if env.Room != "" {
+			s.joinRoom(client, env.Room)
+			// Optionally ack
+			_ = client.send(ctx, Envelope{V: 1, Type: "subscribed", Room: env.Room, ID: env.ID, TS: time.Now().UTC()})
+		}
+	case "action":
+		s.publishAction(env)
+	default:
+		// ignore or echo
+	}
+	return true
+}
+
+// publishAction publishes an action to NATS
+func (s *RealtimeServer) publishAction(env *Envelope) {
+	if s.nats == nil {
+		return
+	}
+
+	subj := fmt.Sprintf("room.%s.action", env.Room)
+	b, _ := json.Marshal(env)
+	if err := s.nats.Publish(subj, b); err != nil {
+		log.Printf("nats publish error: %v", err)
+	}
+}
+
+// setupRoomSubscription sets up NATS subscription for room updates
+func (s *RealtimeServer) setupRoomSubscription() (*nats.Subscription, error) {
+	if s.nats == nil {
+		return nil, nil
+	}
+
+	return s.nats.Subscribe("room.*.update", func(m *nats.Msg) {
+		s.handleRoomUpdate(m)
+	})
+}
+
+// handleRoomUpdate processes room update messages from NATS
+func (s *RealtimeServer) handleRoomUpdate(m *nats.Msg) {
+	// Parse room ID from subject
+	parts := strings.Split(m.Subject, ".")
+	if len(parts) < 3 {
+		return
+	}
+	roomID := parts[1]
+
+	var env Envelope
+	if err := json.Unmarshal(m.Data, &env); err != nil {
+		return
+	}
+	env.V = 1
+	env.TS = time.Now().UTC()
+
+	// Deliver to clients in room
+	s.roomsMu.RLock()
+	peers := s.rooms[roomID]
+	for peer := range peers {
+		// Write with short timeout
+		pctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		_ = peer.send(pctx, env)
+		cancel()
+	}
+	s.roomsMu.RUnlock()
+}
+
+// startKeepAlive starts the keep-alive ping mechanism
+func startKeepAlive(ctx context.Context, client *Client) {
+	ticker := time.NewTicker(25 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			// Best-effort ping
+			_ = client.send(context.Background(), Envelope{V: 1, Type: "ping", ID: randomID(), TS: time.Now().UTC()})
+		}
+	}
+}
+
 func (s *RealtimeServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	conn, err := ws.Accept(w, r, &ws.AcceptOptions{
@@ -134,14 +263,8 @@ func (s *RealtimeServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close(ws.StatusNormalClosure, "bye")
 
-	// Auth via query header Authorization: Bearer <token> or ?token=
-	token := ""
-	if auth := r.Header.Get("Authorization"); strings.HasPrefix(strings.ToLower(auth), "bearer ") {
-		token = strings.TrimSpace(auth[7:])
-	}
-	if token == "" {
-		token = r.URL.Query().Get("token")
-	}
+	// Authenticate client
+	token := extractToken(r)
 	secret := os.Getenv("REALTIME_JWT_SECRET")
 	userID, err := validateJWT(token, secret)
 	if err != nil {
@@ -150,99 +273,24 @@ func (s *RealtimeServer) wsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Create client
 	client := &Client{id: randomID(), userID: userID, conn: conn, rooms: map[string]struct{}{}}
 	log.Printf("client connected uid=%s cid=%s", userID, client.id)
 
-	// Reader loop
-	go func() {
-		for {
-			var env Envelope
-			if err := wsjson.Read(ctx, conn, &env); err != nil {
-				log.Printf("read error: %v", err)
-				break
-			}
-			if env.V == 0 {
-				env.V = 1
-			}
-			if env.ID == "" {
-				env.ID = randomID()
-			}
-			if env.TS.IsZero() {
-				env.TS = time.Now().UTC()
-			}
+	// Start message handling loop
+	go s.handleClientMessages(ctx, client)
 
-			switch env.Type {
-			case "ping":
-				_ = client.send(ctx, Envelope{V: 1, Type: "pong", ID: env.ID, TS: time.Now().UTC()})
-			case "subscribe":
-				if env.Room != "" {
-					s.joinRoom(client, env.Room)
-					// Optionally ack
-					_ = client.send(ctx, Envelope{V: 1, Type: "subscribed", Room: env.Room, ID: env.ID, TS: time.Now().UTC()})
-				}
-			case "action":
-				// Publish to broker for backend processing
-				subj := fmt.Sprintf("room.%s.action", env.Room)
-				b, _ := json.Marshal(env)
-				if s.nats != nil {
-					if err := s.nats.Publish(subj, b); err != nil {
-						log.Printf("nats publish error: %v", err)
-					}
-				}
-			default:
-				// ignore or echo
-			}
-		}
-		// connection closed - cleanup
-		s.leaveAll(client)
-		_ = conn.Close(ws.StatusNormalClosure, "bye")
-	}()
-
-	// Broker subscription: broadcast.* and room.*.update -> fanout to room members
-	if s.nats != nil {
-		sub, err := s.nats.Subscribe("room.*.update", func(m *nats.Msg) {
-			// Parse room ID from subject
-			parts := strings.Split(m.Subject, ".")
-			if len(parts) < 3 {
-				return
-			}
-			roomID := parts[1]
-			var env Envelope
-			if err := json.Unmarshal(m.Data, &env); err != nil {
-				return
-			}
-			env.V = 1
-			env.TS = time.Now().UTC()
-
-			// Deliver to clients in room
-			s.roomsMu.RLock()
-			peers := s.rooms[roomID]
-			for peer := range peers {
-				// Write with short timeout
-				pctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-				_ = peer.send(pctx, env)
-				cancel()
-			}
-			s.roomsMu.RUnlock()
-		})
-		if err != nil {
-			log.Printf("nats subscribe error: %v", err)
-		}
+	// Set up room subscription
+	sub, err := s.setupRoomSubscription()
+	if err != nil {
+		log.Printf("nats subscribe error: %v", err)
+	}
+	if sub != nil {
 		defer sub.Unsubscribe()
 	}
 
-	// Keep-alive pings to maintain connections behind proxies
-	ticker := time.NewTicker(25 * time.Second)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			// Best-effort ping
-			_ = client.send(context.Background(), Envelope{V: 1, Type: "ping", ID: randomID(), TS: time.Now().UTC()})
-		}
-	}
+	// Start keep-alive mechanism
+	startKeepAlive(ctx, client)
 }
 
 func exponentialBackoff(attempt int) time.Duration {
