@@ -5,7 +5,7 @@ PIP = $(VENV)/bin/pip
 UVICORN = $(VENV)/bin/uvicorn
 PYTEST = $(VENV)/bin/pytest
 
-.PHONY: help venv install init-db run run-dev test test-backend test-frontend clean dev frontend-install frontend-dev frontend-build deploy db-reset
+.PHONY: help venv install init-db run run-dev test test-backend test-frontend clean dev frontend-install frontend-dev frontend-build deploy db-reset load-test
 
 help:
 	@echo "Targets:"
@@ -66,4 +66,8 @@ deploy: frontend-build
 db-reset: install
 	rm -f set.db
 	$(PYTHON) -m app.init_db
+
+# Run a simple k6 load test (requires k6 installed locally)
+load-test:
+	BASE_URL=http://127.0.0.1:8000 k6 run scripts/k6/simple.js
 
