@@ -191,10 +191,17 @@ def finish_session(session: Session, sid: str):
     return gs
 
 
-def get_leaderboard(session: Session, date: str, limit: int = 10):
-    """Return list of {username, best, completed_at} where completed_at corresponds to the best time.
-    If multiple completions share the same best seconds for a player, pick the earliest completed_at.
+def get_leaderboard(session: Session, date: str, limit: int | None = 10):
+    """Return list of {username, best, completed_at, sets_found, effective}.
+    - best: minimum seconds for the date
+    - completed_at: earliest timestamp for that best
+    - sets_found: total FoundSet rows for the date
+    - effective: best adjusted by a 12% decrease per additional set beyond the first
+                 effective = best * (0.88 ** max(0, sets_found - 1))
+    Sorted ascending by effective; ties broken by best then completed_at.
+    If limit is None, return all rows; otherwise return up to limit.
     """
+    # Subquery: best seconds per player for the date
     best_subq = (
         sa_select(
             col(models.Completion.player_id).label('pid'),
@@ -204,11 +211,23 @@ def get_leaderboard(session: Session, date: str, limit: int = 10):
         .group_by(models.Completion.player_id)
     ).subquery()
 
+    # Subquery: count of found sets per player for the date
+    sets_subq = (
+        sa_select(
+            col(models.FoundSet.player_id).label('pid'),
+            func.count(models.FoundSet.id).label('sets_found')
+        )
+        .where(models.FoundSet.date == date)
+        .group_by(models.FoundSet.player_id)
+    ).subquery()
+
+    # Join to get username, best, earliest completed_at for that best, and sets_found (COALESCE 0)
     stmt = (
         sa_select(
             models.Player.username,
             best_subq.c.best,
-            func.min(models.Completion.completed_at).label('completed_at')
+            func.min(models.Completion.completed_at).label('completed_at'),
+            func.coalesce(sets_subq.c.sets_found, 0).label('sets_found')
         )
         .join(best_subq, models.Player.id == best_subq.c.pid)
         .join(
@@ -217,22 +236,35 @@ def get_leaderboard(session: Session, date: str, limit: int = 10):
             & (models.Completion.seconds == best_subq.c.best)
             & (models.Completion.date == date)
         )
-        .group_by(models.Player.username, best_subq.c.best)
-        .order_by(best_subq.c.best)
-        .limit(limit)
+        .join(sets_subq, sets_subq.c.pid == best_subq.c.pid, isouter=True)
+        .group_by(models.Player.username, best_subq.c.best, sets_subq.c.sets_found)
     )
-    res = session.execute(stmt)
-    rows = res.fetchall()
+
+    rows = session.execute(stmt).all()
     leaders = []
-    for r in rows:
-        username = r[0]
-        best = int(r[1]) if r[1] is not None else None
-        completed_at = r[2]
+    for username, best, completed_at, sets_found in rows:
+        best_int = int(best) if best is not None else None
+        sets_int = int(sets_found or 0)
+        # Calculate effective time reduction
+        extra = max(0, sets_int - 1)
+        effective = None
+        if best_int is not None:
+            effective = float(best_int) * (0.88 ** extra)
         leaders.append({
             'username': username,
-            'best': best,
+            'best': best_int,
             'completed_at': completed_at.isoformat() if completed_at else None,
+            'sets_found': sets_int,
+            'effective': effective,
         })
+    # Sort by effective asc, then best asc, then completed_at asc
+    leaders.sort(key=lambda r: (
+        float('inf') if r['effective'] is None else r['effective'],
+        float('inf') if r['best'] is None else r['best'],
+        '' if r['completed_at'] is None else r['completed_at'],
+    ))
+    if isinstance(limit, int) and limit > 0:
+        return leaders[:limit]
     return leaders
 
 
@@ -265,20 +297,33 @@ def get_player_daily_status(session: Session, player_id: int, date: str):
         return None
     best_secs = int(best_val)
 
-    # Placement: count how many players have a strictly better (lower) best time
-    best_subq = (
-        sa_select(
-            col(models.Completion.player_id).label('pid'),
-            func.min(models.Completion.seconds).label('best')
-        )
-        .where(models.Completion.date == date)
-        .group_by(models.Completion.player_id)
-    ).subquery()
-    better_count = session.execute(
-        sa_select(func.count())
-        .where(best_subq.c.best < best_secs)
+    # Sets found for this player/date
+    sets_found = session.execute(
+        sa_select(func.count(models.FoundSet.id))
+        .where(models.FoundSet.player_id == player_id)
+        .where(models.FoundSet.date == date)
     ).scalar() or 0
-    placement = int(better_count) + 1
+
+    # Effective time for this player
+    extra = max(0, int(sets_found) - 1)
+    effective = float(best_secs) * (0.88 ** extra)
+
+    # Placement: compute via effective ranking
+    all_leaders = get_leaderboard(session, date, limit=None)
+    # Find this player's placement among all by matching best and username
+    # We need username to match entries
+    username = session.execute(
+        sa_select(models.Player.username)
+        .where(models.Player.id == player_id)
+    ).scalar()
+    placement = None
+    if username is not None:
+        for idx, row in enumerate(all_leaders, start=1):
+            if row.get('username') == username:
+                placement = idx
+                break
+    if placement is None:
+        placement = 1
 
     # Earliest completion timestamp for the best time
     completed_at = session.execute(
@@ -289,7 +334,9 @@ def get_player_daily_status(session: Session, player_id: int, date: str):
     ).scalar()
 
     return {
-        'seconds': best_secs,
+    'seconds': best_secs,
         'completed_at': completed_at.isoformat() if completed_at else None,
-        'placement': placement,
+    'placement': placement,
+    'sets_found': int(sets_found),
+    'effective': effective,
     }
