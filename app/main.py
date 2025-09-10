@@ -155,22 +155,41 @@ app.add_middleware(GZipMiddleware, minimum_size=512)
 
 # Security headers & Content Security Policy
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request, call_next):
-        response = await call_next(request)
-        # Strict Content Security Policy suitable for this app
-        csp = "; ".join([
+    def _csp_connect_sources(self) -> list[str]:
+        srcs: list[str] = ["'self'"]
+        try:
+            import os as _os
+            from urllib.parse import urlparse as _urlparse
+            rt = _os.getenv('REALTIME_WS_URL')
+            if rt:
+                p = _urlparse(rt)
+                if p.scheme in ('ws', 'wss') and p.hostname:
+                    host = p.hostname
+                    if p.port:
+                        host = f"{host}:{p.port}"
+                    src = f"{p.scheme}://{host}"
+                    if src not in srcs:
+                        srcs.append(src)
+        except Exception:
+            pass
+        return srcs
+    
+    def _set_security_headers(self, response):
+        # Build a strict Content Security Policy
+        csp_directives = [
             "default-src 'self'",
             "script-src 'self'",
             "style-src 'self' 'unsafe-inline'",
             "img-src 'self' data:",
             "font-src 'self'",
-            "connect-src 'self' ws: wss:",
+            f"connect-src {' '.join(self._csp_connect_sources())}",
             "object-src 'none'",
             "base-uri 'self'",
             "frame-ancestors 'none'",
             "form-action 'self'",
             "upgrade-insecure-requests",
-        ])
+        ]
+        csp = "; ".join(csp_directives)
         response.headers['Content-Security-Policy'] = csp
         # Additional best-practice headers
         response.headers.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
@@ -180,6 +199,10 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers.setdefault('Cross-Origin-Opener-Policy', 'same-origin')
         # HSTS is only relevant when behind HTTPS; enabling is generally safe in prod
         response.headers.setdefault('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        self._set_security_headers(response)
         return response
 
 app.add_middleware(SecurityHeadersMiddleware)
