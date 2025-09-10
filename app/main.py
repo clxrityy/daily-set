@@ -1152,3 +1152,29 @@ def __test_broadcast(event: dict):
         raise HTTPException(status_code=404, detail="not found")
     # Intentionally no-op; kept for compatibility, real test broadcast uses WS trigger
     return {"ok": True}
+
+
+# SPA fallback LAST: serve index.html for non-API/non-static paths
+@app.get("/{full_path:path}", include_in_schema=False)
+def spa_fallback(full_path: str):
+    # Preserve API and known asset paths
+    if full_path.startswith("api/") or full_path.startswith("static/"):
+        return JSONResponse({"detail": "not found"}, status_code=404)
+    # Also preserve common root files already handled explicitly
+    if full_path in {
+        "robots.txt",
+        "sitemap.xml",
+        "site.webmanifest",
+        "manifest.webmanifest",
+        "android-chrome-192x192.png",
+        "android-chrome-512x512.png",
+        "apple-touch-icon.png",
+        "favicon-16x16.png",
+        "favicon-32x32.png",
+        "favicon.ico",
+        "health",
+    }:
+        return JSONResponse({"detail": "not found"}, status_code=404)
+    # Fall back by redirecting to the root so the URL is rewritten to '/'
+    # Use a temporary redirect to avoid caching/permanent changes.
+    return RedirectResponse(url="/", status_code=302)
