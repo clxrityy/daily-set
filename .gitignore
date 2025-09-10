@@ -13,3 +13,9 @@ node_modules/
 *coverage/
 **/dist/
 *coverage*
+
+# Go realtime artifacts
+realtime/realtime
+realtime/out/
+realtime/*.log
+realtime/.env
