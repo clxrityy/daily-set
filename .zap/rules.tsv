@@ -1,0 +1,2 @@
+10054	IGNORE	Cookie Without Secure Flag	Justification: Local dev and non-TLS test environments.
+10055	IGNORE	Cookie Without SameSite Attribute	Justification: SameSite set where applicable; false positives possible on static assets.

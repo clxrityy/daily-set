@@ -1,0 +1,43 @@
+name: ZAP Baseline Scan
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Target URL to scan"
+        required: true
+        default: "https://daily-set.fly.dev"
+
+jobs:
+  zap_scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: ZAP Baseline Scan
+        uses: zaproxy/action-baseline@v0.10.0
+        with:
+          target: ${{ github.event.inputs.target }}
+          rules_file_name: ".zap/rules.tsv"
+          allow_issue_writing: false
+          # -a: include alpha passive rules
+          # -r/-J/-w: emit HTML, JSON, and Markdown reports for easy consumption
+          cmd_options: "-a -r zap-report.html -J zap-report.json -w zap-report.md"
+      - name: Publish ZAP summary
+        if: always()
+        run: |
+          echo "## ZAP Baseline results for ${{ github.event.inputs.target }}" >> $GITHUB_STEP_SUMMARY
+          if [ -f zap-report.md ]; then
+            cat zap-report.md >> $GITHUB_STEP_SUMMARY
+          else
+            echo "No zap-report.md generated." >> $GITHUB_STEP_SUMMARY
+          fi
+      - name: Upload ZAP report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-baseline-report
+          path: |
+            zap-report.html
+            zap-report.json
+            zap-report.md
+          if-no-files-found: warn
