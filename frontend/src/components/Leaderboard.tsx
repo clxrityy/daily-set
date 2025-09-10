@@ -41,10 +41,17 @@ export function Leaderboard({ date, limit = 8 }: { readonly date?: string; reado
                 fetchNow()
             }, 300) as unknown as number
         }
+        const usingGateway = Boolean((import.meta as any)?.env?.VITE_REALTIME_WS_URL)
         const getWsUrl = () => {
+            const envUrl = (import.meta as any)?.env?.VITE_REALTIME_WS_URL as string | undefined
+            if (envUrl?.startsWith('ws')) return envUrl
             const { protocol, host } = window.location
             const wsProto = protocol === 'https:' ? 'wss' : 'ws'
             return `${wsProto}://${host}/ws`
+        }
+        const roomForDate = (d?: string | null) => {
+            if (!d) return null
+            return `daily-${String(d).replace(/-/g, '')}`
         }
         const connect = () => {
             try {
@@ -56,14 +63,27 @@ export function Leaderboard({ date, limit = 8 }: { readonly date?: string; reado
                 retryDelay = Math.min(5000, Math.floor(retryDelay * 1.5))
                 return
             }
-            ws.onopen = () => { retryDelay = 800 }
+            ws.onopen = () => {
+                retryDelay = 800
+                if (usingGateway) {
+                    const room = roomForDate(date)
+                    if (room) {
+                        try { ws?.send(JSON.stringify({ v: 1, type: 'subscribe', room })) } catch { /* noop */ }
+                    }
+                }
+            }
             ws.onmessage = (ev) => {
                 try {
                     const msg = JSON.parse(ev.data)
-                    if (!msg?.type) return
-                    if (msg.type === 'leaderboard_change' || msg.type === 'completion') {
+                    if (!msg) return
+                    // Support both direct events (Python WS) and broker envelopes (Go gateway)
+                    const t = msg.type
+                    const payloadEvent = msg?.payload?.event
+                    const it = payloadEvent?.type
+                    if (t === 'leaderboard_change' || t === 'completion' || it === 'leaderboard_change' || it === 'completion') {
                         // If a specific date is requested, only refetch when it matches
-                        if (!date || msg.date === date) scheduleRefetch()
+                        const msgDate = msg.date || payloadEvent?.date
+                        if (!date || msgDate === date) scheduleRefetch()
                     }
                 } catch { /* ignore */ }
             }
