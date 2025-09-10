@@ -8,6 +8,7 @@ import { MenuTab } from './components/MenuTab'
 import { LeaderboardPanel } from './components/LeaderboardPanel'
 import { FoundSetsGallery } from './components/FoundSetsGallery'
 import { Footer } from './components/Footer'
+import { haptic } from './lib/haptics'
 // import type { Card } from './lib/api'
 
 const SKELETON_KEYS: readonly string[] = Array.from({ length: 12 }, (_, i) => `s-${i}`)
@@ -97,12 +98,27 @@ function InnerApp() {
     useEffect(() => {
         if (selected.length === 3) {
             submitSelected().then((res: any) => {
-                if (res?.ok) toasts.add({ severity: 'success', message: 'Great! Valid set found!' })
-                else if (res?.userFriendly) toasts.add({ severity: 'info', message: res.data.detail })
-                else toasts.add({ severity: 'error', message: 'Server error submitting set' })
+                if (res?.ok) {
+                    haptic.success()
+                    toasts.add({ severity: 'success', message: 'Great! Valid set found!' })
+                } else if (res?.userFriendly) {
+                    // mild info feedback; no haptic to avoid noise
+                    toasts.add({ severity: 'info', message: res.data.detail })
+                } else {
+                    haptic.error()
+                    toasts.add({ severity: 'error', message: 'Server error submitting set' })
+                }
             })
         }
     }, [selected, submitSelected, toasts])
+
+    // Leaderboard gating
+    const [lbOpen, setLbOpen] = useState(false)
+    const canViewLeaderboard = completedToday || complete
+    const onOpenLeaderboard = () => {
+        if (canViewLeaderboard) setLbOpen((v) => !v)
+        else toasts.add({ severity: 'info', message: 'Complete today’s Daily Set to view the leaderboard.' })
+    }
 
     const onStart = async () => {
         try {
@@ -138,6 +154,8 @@ function InnerApp() {
 
     return (
         <div className="container">
+            <MenuTab onOpenLeaderboard={onOpenLeaderboard} />
+            <LeaderboardPanel open={lbOpen} onClose={() => setLbOpen(false)} />
             <div className="controls">
                 {startAt ? (
                     <span id="timer" className="timer">{mm}:{ss}</span>
@@ -250,11 +268,8 @@ function InnerApp() {
 }
 
 export default function App() {
-    const [lbOpen, setLbOpen] = useState(false)
     return (
         <ToastProvider>
-            <MenuTab onOpenLeaderboard={() => setLbOpen((v) => !v)} />
-            <LeaderboardPanel open={lbOpen} onClose={() => setLbOpen(false)} />
             <InnerApp />
             <Footer />
         </ToastProvider>
