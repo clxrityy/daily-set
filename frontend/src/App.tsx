@@ -1,11 +1,12 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Board } from './components/Board'
 import { ToastProvider, useToasts } from './lib/errors'
 import { useGame } from './lib/game'
-import { Leaderboard } from './components/Leaderboard'
+// Lazy import heavy/optional panels to reduce initial JS
+const LeaderboardPanelLazy = React.lazy(() => import('./components/LeaderboardPanel').then(m => ({ default: m.LeaderboardPanel })))
+const LazyLeaderboard = React.lazy(() => import('./components/Leaderboard').then(m => ({ default: m.Leaderboard })))
 import { loadStatus } from './lib/api'
 import { MenuTab } from './components/MenuTab'
-import { LeaderboardPanel } from './components/LeaderboardPanel'
 import { FoundSetsGallery } from './components/FoundSetsGallery'
 import { Footer } from './components/Footer'
 import { haptic } from './lib/haptics'
@@ -155,7 +156,11 @@ function InnerApp() {
     return (
         <div className="container">
             <MenuTab onOpenLeaderboard={onOpenLeaderboard} />
-            <LeaderboardPanel open={lbOpen} onClose={() => setLbOpen(false)} />
+            {lbOpen ? (
+                <Suspense fallback={null}>
+                    <LeaderboardPanelLazy open={lbOpen} onClose={() => setLbOpen(false)} />
+                </Suspense>
+            ) : null}
             <div className="controls">
                 {startAt ? (
                     <span id="timer" className="timer">{mm}:{ss}</span>
@@ -194,7 +199,9 @@ function InnerApp() {
                                 {/* Set previews removed for now */}
 
                                 <div className="overlay-leaderboard">
-                                    <Leaderboard limit={10} />
+                                    <Suspense fallback={null}>
+                                        <LazyLeaderboard limit={10} realtime={false} />
+                                    </Suspense>
                                 </div>
                             </div>
                         ) : (
