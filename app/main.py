@@ -325,8 +325,11 @@ app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 
 @app.get("/", include_in_schema=False)
 def root():
-    # redirect to the built React app (Vite outDir -> /static/dist)
-    return RedirectResponse(url="/static/dist/index.html")
+    # Serve the built React app directly at the root path
+    index_path = _STATIC_DIR / "dist" / "index.html"
+    if index_path.exists():
+        return FileResponse(str(index_path), media_type="text/html; charset=utf-8")
+    return JSONResponse({"detail": "index.html not found"}, status_code=404)
 
 
 @app.get("/robots.txt", include_in_schema=False)
