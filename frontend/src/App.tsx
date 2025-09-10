@@ -37,6 +37,23 @@ function InnerApp() {
     const toasts = useToasts()
     const [completedToday, setCompletedToday] = useState<boolean | null>(null)
     const [completedDetail, setCompletedDetail] = useState<{ seconds?: number; placement?: number; completed_at?: string | null } | null>(null)
+    const completedFmt = useMemo(() => {
+        const iso = completedDetail?.completed_at
+        if (!iso) return null
+        // Defensive parsing: if the string lacks timezone info, assume UTC
+        const hasTZ = /([zZ]|[+-]\d{2}:?\d{2})$/.test(iso)
+        const dt = new Date(hasTZ ? iso : iso + 'Z')
+        const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone
+        const dtf = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', timeZone })
+        const local = dtf.format(dt)
+        // Short timezone via formatToParts for locale-safe extraction
+        const tzParts = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', timeZoneName: 'short', timeZone }).formatToParts(dt)
+        const tz = tzParts.find(p => p.type === 'timeZoneName')?.value || timeZone
+        const uh = String(dt.getUTCHours()).padStart(2, '0')
+        const um = String(dt.getUTCMinutes()).padStart(2, '0')
+        const utc = `${uh}:${um} UTC`
+        return { local, tz, utc }
+    }, [completedDetail?.completed_at])
     // Set previews temporarily removed
 
     const formatSeconds = (secs?: number) => {
@@ -121,7 +138,6 @@ function InnerApp() {
 
     return (
         <div className="container">
-            <h1>Daily Set</h1>
             <div className="controls">
                 {startAt ? (
                     <span id="timer" className="timer">{mm}:{ss}</span>
@@ -149,7 +165,11 @@ function InnerApp() {
                                     </div>
                                     <div>
                                         <strong>Completed at:</strong>{' '}
-                                        {completedDetail?.completed_at ? new Date(completedDetail.completed_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}
+                                        {completedFmt ? (
+                                            <span title={`UTC: ${completedFmt.utc}`}>
+                                                {completedFmt.local} <span className="tz">{completedFmt.tz}</span>
+                                            </span>
+                                        ) : '—'}
                                     </div>
                                 </div>
 
