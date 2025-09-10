@@ -19,6 +19,7 @@ import json
 from datetime import datetime, timezone
 from starlette.middleware.base import BaseHTTPMiddleware
 from .logging_utils import setup_logging, get_logger, request_id_ctx
+from .realtime_publisher import publish_room_update_sync
 import logging
 import uuid
 
@@ -117,6 +118,19 @@ async def broadcast_event(event: dict):
     logger.debug("broadcast_event_enriched", extra={"event": event, "ws_count": len(_WS_CONNECTIONS)})
 
     json_message = _prepare_message(event)
+
+    # Also publish to external realtime (NATS) if configured.
+    try:
+        # Use UTC date on completion events when available; otherwise a general channel
+        room = None
+        if isinstance(event, dict):
+            date = event.get('date')
+            if date:
+                # Avoid dots in room token (NATS subject is tokenized by '.')
+                room = f"daily-{str(date).replace('-', '')}"
+        publish_room_update_sync(room or "broadcast", {"event": event})
+    except Exception as ex:
+        logger.debug("broadcast_event_publish_failed", extra={"error": str(ex)})
     now = time.time()
     dead = []
 

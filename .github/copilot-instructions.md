@@ -6,6 +6,7 @@
 - `.github/`: Contains GitHub workflows and Copilot instructions.
 - `app/`: Contains the FastAPI backend code.
 - `frontend/`: Contains the React frontend code.
+- `realtime/`: Contains the Go WebSocket gateway code.
 
 ## Instructions
 
