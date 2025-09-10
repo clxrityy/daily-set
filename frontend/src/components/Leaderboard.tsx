@@ -98,7 +98,7 @@ export function Leaderboard({ date, limit = 8 }: { readonly date?: string; reado
                             </tr>
                         </thead>
                         <tbody>
-                            {Array.from({ length: data?.leaders.length ?? limit }).map((_, i) => (
+                            {Array.from({ length: 2 }).map((_, i) => (
                                 <tr key={`skel-row-${(i + 1).toString(36)}`} className="lb-skel-row">
                                     <td><div className="sk sk-num" /></td>
                                     <td><div className="sk sk-name" /></td>
