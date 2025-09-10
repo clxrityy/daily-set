@@ -5,7 +5,7 @@ PIP = $(VENV)/bin/pip
 UVICORN = $(VENV)/bin/uvicorn
 PYTEST = $(VENV)/bin/pytest
 
-.PHONY: help venv install init-db run run-dev test test-backend test-frontend clean dev frontend-install frontend-dev frontend-build deploy db-reset load-test
+.PHONY: help venv install init-db run run-dev test test-backend test-frontend clean dev frontend-install frontend-dev frontend-build deploy db-reset load-test realtime-dev nats-dev realtime-build
 
 help:
 	@echo "Targets:"
@@ -20,6 +20,9 @@ help:
 	@echo "  make frontend-dev     - start Vite dev server"
 	@echo "  make frontend-build   - build React app into app/static/dist"
 	@echo "  make deploy      - build frontend and deploy with fly deploy"
+	@echo "  make realtime-dev - run Go realtime gateway (requires Go)"
+	@echo "  make nats-dev     - run local NATS broker via docker (requires Docker)"
+	@echo "  make realtime-build - build Go realtime binary"
 
 venv:
 	test -d $(VENV) || $(PY) -m venv $(VENV)
@@ -56,9 +59,6 @@ frontend-dev:
 frontend-build:
 	cd frontend && npm run build
 
-dev: frontend-build
-	$(UVICORN) app.main:app --reload
-
 deploy: frontend-build
 	bash scripts/deploy.sh
 
@@ -71,3 +71,20 @@ db-reset: install
 load-test:
 	BASE_URL=http://127.0.0.1:8000 k6 run scripts/k6/simple.js
 
+# --- Realtime (Go) helpers ---
+realtime-build:
+	cd realtime && go build -o realtime .
+
+realtime-dev:
+	cd realtime && REALTIME_ADDR=":8081" go run .
+
+nats-dev:
+	docker run --rm -p 4222:4222 -p 8222:8222 -p 6222:6222 --name nats-dev nats:latest -js
+
+# Kill port 8081 (for realtime dev)
+kill-port:
+	bash scripts/kill_port.sh
+
+# Development environment
+dev: frontend-build
+	bash scripts/dev_full.sh
