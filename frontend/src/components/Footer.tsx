@@ -15,7 +15,13 @@ export function Footer() {
             <div className="footer-bar">
                 <div className="footer-left">
                     <a className="brand" href="/" aria-label="Daily Set home" title="Daily Set">
-                        <img className="brand-logo" src="/static/favicon-32x32.png" alt="Logo" />
+                        <img
+                            className="brand-logo"
+                            src="/static/favicon-32x32.png"
+                            srcSet="/static/android-chrome-192x192.png 6x, /static/android-chrome-512x512.png 16x, /static/favicon-32x32.png 1x"
+                            sizes="18px"
+                            alt="Logo"
+                        />
                         <span className="brand-title">Daily Set</span>
                     </a>
                 </div>
