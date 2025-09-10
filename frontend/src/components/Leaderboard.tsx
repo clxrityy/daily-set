@@ -3,7 +3,7 @@ import type { Leader, LeaderboardResponse, FoundSetsResponse } from '../lib/api'
 import { loadLeaderboard, loadFoundSets } from '../lib/api'
 import { FoundSetsGallery } from './FoundSetsGallery'
 
-export function Leaderboard({ date, limit = 8 }: { readonly date?: string; readonly limit?: number }) {
+export function Leaderboard({ date, limit = 8, realtime = true }: { readonly date?: string; readonly limit?: number; readonly realtime?: boolean }) {
     const [data, setData] = useState<LeaderboardResponse | null>(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
@@ -31,9 +31,14 @@ export function Leaderboard({ date, limit = 8 }: { readonly date?: string; reado
     }, [fetchNow])
 
     useEffect(() => {
+        if (!realtime) return
         let alive = true
         let ws: WebSocket | null = null
         let retryDelay = 800
+        const onPageHide = () => {
+            try { ws?.close() } catch { /* noop */ }
+        }
+        window.addEventListener('pagehide', onPageHide)
         const scheduleRefetch = () => {
             if (refetchTimer.current != null) return
             refetchTimer.current = window.setTimeout(() => {
@@ -100,8 +105,9 @@ export function Leaderboard({ date, limit = 8 }: { readonly date?: string; reado
             if (ws) { try { ws.close() } catch { /* noop */ } }
             if (wsRetryTimer.current != null) { clearTimeout(wsRetryTimer.current); wsRetryTimer.current = null }
             if (refetchTimer.current != null) { clearTimeout(refetchTimer.current); refetchTimer.current = null }
+            window.removeEventListener('pagehide', onPageHide)
         }
-    }, [date, fetchNow])
+    }, [date, fetchNow, realtime])
 
     if (loading) {
         return (
