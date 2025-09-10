@@ -11,6 +11,8 @@
     --success-bg: #f0fdf4;
     --success-fg: #166534;
     --success-border: #bbf7d0;
+    /* Reserve space on the right for the menubar so toasts don't overlap */
+    --menu-space: 120px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -361,6 +363,28 @@ body.theme-vars .overlay-btn {
     }
 }
 
+/* Improve mobile hit areas and scrolling ergonomics */
+.card {
+    min-height: 100px;
+    /* ensure ~44px finger target for interior controls */
+    touch-action: manipulation;
+    /* avoid double-tap zoom, improve latency */
+    -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
+}
+
+/* Slightly larger cards on very small screens for accessibility */
+@media (max-width: 420px) {
+    .board {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+    }
+
+    .card {
+        min-height: 110px;
+    }
+}
+
 /* Pre-start: blur and disable cards until the user starts the game */
 .board.prestart .card {
     position: relative;
@@ -506,7 +530,8 @@ body.theme-vars .overlay-btn {
 /* Mobile-first responsive adjustments */
 @media (max-width: 520px) {
     .container {
-        padding: 12px;
+        /* Push content further down on mobile to clear fixed menubar */
+        padding: calc(env(safe-area-inset-top, 0) + 56px) 12px 12px;
     }
 
     .controls {
@@ -539,6 +564,8 @@ body.theme-vars .overlay-btn {
 
     .overlay-btn {
         width: 100%;
+        min-height: 44px;
+        /* iOS HIG recommended minimum */
     }
 }
 
@@ -649,6 +676,20 @@ body.theme-vars .overlay-btn {
 
 .leaderboard .lb-user:hover {
     text-decoration: none;
+}
+
+/* Enlarge tap target for leaderboard username anchors on touch devices */
+@media (hover: none) and (pointer: coarse) {
+    .leaderboard .lb-user {
+        padding: 4px 6px;
+        margin: -4px -6px;
+        /* expand without shifting layout */
+        border-radius: 6px;
+    }
+
+    .leaderboard .lb-user:active {
+        background: color-mix(in srgb, var(--fg) 8%, transparent);
+    }
 }
 
 .leaderboard .user-sets-panel {
@@ -889,11 +930,12 @@ body.theme-vars .overlay-hint {
 @media (min-width: 700px) {
     .toast-container {
         top: 32px;
-        right: 16px;
-        left: auto;
-        width: min(360px, calc(100vw - 32px));
+        left: 16px;
+        right: auto;
+        /* Leave a gap for the menubar area on the right */
+        width: min(360px, calc(100vw - 32px - var(--menu-space)));
         padding: 0;
-        align-items: flex-end;
+        align-items: flex-start;
     }
 }
 

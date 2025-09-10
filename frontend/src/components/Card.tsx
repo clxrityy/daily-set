@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react'
 import type { Card as CardTuple } from '../lib/api'
 import { createSymbolSVG } from '../lib/svg'
+import { haptic } from '../lib/haptics'
 
 // We will reuse the existing svg.js createSymbolSVG via dynamic import and DOM append
 export function CardView({ card, idx, selected, onSelect, cleared, preStart }: {
@@ -48,6 +49,13 @@ export function CardView({ card, idx, selected, onSelect, cleared, preStart }: {
             role="button"
             tabIndex={0}
             aria-label={`Card ${idx + 1}`}
+            onPointerDown={(e) => {
+                // Light haptic on touch/pen pointer to acknowledge tap intent
+                if (isCleared || isPreStart) return
+                if ((e as React.PointerEvent).pointerType === 'touch' || (e as React.PointerEvent).pointerType === 'pen') {
+                    haptic.light()
+                }
+            }}
             onClick={(e) => {
                 if (isCleared || isPreStart) return
                 const wasSelected = isSel
