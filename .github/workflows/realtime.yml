@@ -1,0 +1,56 @@
+name: Realtime CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "realtime/**"
+      - ".github/workflows/realtime.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "realtime/**"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: realtime
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Cache Go build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Download deps
+        run: go mod download
+
+      - name: Run tests with coverage
+        run: |
+          go test ./... -covermode=atomic -coverprofile=coverage-realtime.out
+          # Ensure a coverage file exists for Codecov even if no tests produced one
+          test -s coverage-realtime.out || echo 'mode: atomic' > coverage-realtime.out
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./realtime/coverage-realtime.out
+          flags: realtime
+          slug: clxrityy/daily-set
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
