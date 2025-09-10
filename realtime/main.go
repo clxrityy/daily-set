@@ -82,6 +82,8 @@ func (s *RealtimeServer) leaveAll(c *Client) {
 				delete(s.rooms, room)
 			}
 		}
+		// Also clear the client's own membership record
+		delete(c.rooms, room)
 	}
 }
 
