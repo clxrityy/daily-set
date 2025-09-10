@@ -61,6 +61,8 @@ frontend-build:
 
 deploy: frontend-build
 	bash scripts/deploy.sh
+	bash scripts/realtime_deploy.sh
+	bash scripts/nats_deploy.sh
 
 # Delete local SQLite DB and re-initialize schema
 db-reset: install
