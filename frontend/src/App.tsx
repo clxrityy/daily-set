@@ -7,6 +7,7 @@ import { loadStatus } from './lib/api'
 import { MenuTab } from './components/MenuTab'
 import { LeaderboardPanel } from './components/LeaderboardPanel'
 import { FoundSetsGallery } from './components/FoundSetsGallery'
+import { Footer } from './components/Footer'
 // import type { Card } from './lib/api'
 
 const SKELETON_KEYS: readonly string[] = Array.from({ length: 12 }, (_, i) => `s-${i}`)
@@ -235,6 +236,7 @@ export default function App() {
             <MenuTab onOpenLeaderboard={() => setLbOpen((v) => !v)} />
             <LeaderboardPanel open={lbOpen} onClose={() => setLbOpen(false)} />
             <InnerApp />
+            <Footer />
         </ToastProvider>
     )
 }

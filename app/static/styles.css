@@ -101,6 +101,42 @@ body {
     }
 }
 
+/* Fixed footer with always-clickable GitHub link */
+.app-footer {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 12px;
+    /* slight offset from edge for comfort */
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    z-index: 9999;
+    /* above overlays */
+    pointer-events: auto;
+    /* ensure clicks pass to footer */
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    /* avoid iOS home indicator */
+    padding-left: max(12px, env(safe-area-inset-left, 0px));
+}
+
+.app-footer .menu-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 9999px;
+    color: inherit;
+    /* theme-aware via currentColor */
+    text-decoration: none;
+}
+
+.app-footer .menu-btn svg {
+    width: 22px;
+    height: 22px;
+}
+
 /* board container should wrap cards and remain responsive and centered */
 #board {
     display: flex;
