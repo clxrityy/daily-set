@@ -12,7 +12,7 @@ export type SubmitSetPayload = {
 export type SubmitResultOk = { ok: true; data: any }
 export type SubmitResultErr = { ok: false; data: any; userFriendly?: boolean }
 export type SubmitResult = SubmitResultOk | SubmitResultErr
-export type Leader = { username: string; best: number; completed_at?: string | null }
+export type Leader = { username: string; best: number; completed_at?: string | null; sets_found?: number; effective?: number }
 export type LeaderboardResponse = { date: string; leaders: Leader[] }
 export type FoundSetsResponse = { username: string; date: string; sets: Card[][] }
 
