@@ -1,0 +1,24 @@
+# Fly app for Daily Set Realtime (Go)
+
+app = 'daily-set-realtime'
+primary_region = 'iad'
+
+[build]
+
+[http_service]
+auto_start_machines = true
+auto_stop_machines = 'off'
+force_https = true
+internal_port = 8081
+min_machines_running = 1
+processes = ['app']
+
+[env]
+REALTIME_ADDR = ":8081"
+# REALTIME_JWT_SECRET will be set via secrets in Fly
+# NATS_URL can be set to your broker (e.g., nats://<host>:4222)
+
+[[vm]]
+cpu_kind = 'shared'
+cpus = 1
+memory = '256mb'
