@@ -652,11 +652,8 @@ def start_session(body: StartSessionRequest, request: Request, response: Respons
         player_id = _create_player_and_set_cookie(session, body.username, response)
 
     # If user has already completed today, forbid another session
-    try:
-        if player_id and crud.has_completed(session, player_id, date):
-            raise HTTPException(status_code=403, detail="Already completed today's game")
-    except Exception:
-        pass
+    if player_id and crud.has_completed(session, player_id, date):
+        raise HTTPException(status_code=403, detail="Already completed today's game")
 
     # Reuse existing unfinished session for this player/date if present
     existing = crud.get_active_session_for_player_date(session, player_id, date)
@@ -706,6 +703,9 @@ def get_current_session(request: Request, session: Session = Depends(get_session
     date = game.today_str()
     pid = _resolve_player_id(session, None, request)
     if not pid:
+        return {"active": False}
+    # If already completed today, consider there is no active playable session
+    if crud.has_completed(session, pid, date):
         return {"active": False}
     gs = crud.get_active_session_for_player_date(session, pid, date)
     if not gs:
@@ -935,6 +935,16 @@ def submit_set(
 ):
     sid = _get_sid_from_body(body, session)
     gs, board, date = _load_session_board(session, body, sid)
+    # Prevent further submissions after the player has completed today's daily
+    # If we have a bound session with a player, enforce by cookie identity; otherwise, if username present, enforce by username
+    pid_for_check = None
+    if gs and getattr(gs, 'player_id', None):
+        pid_for_check = gs.player_id
+    elif body.username:
+        p_obj = crud.get_player_by_username(session, body.username)
+        pid_for_check = getattr(p_obj, 'id', None) if p_obj else None
+    if pid_for_check and crud.has_completed(session, pid_for_check, date):
+        raise HTTPException(status_code=403, detail="Already completed today's game")
     cards = _validate_and_get_cards(body, board)
     _apply_session_changes(session, body, gs, board)
     _maybe_record_standalone(session, body, date)
