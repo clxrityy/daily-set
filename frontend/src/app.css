@@ -332,7 +332,7 @@ body.theme-vars .overlay-btn {
 
 /* Basic container and messages to replace inline styles */
 .container {
-    padding: 24px;
+    padding: 32px 24px 24px;
 }
 
 .loading {
@@ -350,6 +350,7 @@ body.theme-vars .overlay-btn {
     display: flex;
     flex-wrap: wrap;
     gap: 12px;
+    margin-top: 20px;
 }
 
 @media (min-width: 700px) {
@@ -466,6 +467,12 @@ body.theme-vars .overlay-btn {
 .overlay-date {
     font-size: 14px;
     color: #6b7280;
+}
+
+.tz {
+    font-size: 12px;
+    color: var(--muted);
+    margin-left: 6px;
 }
 
 .overlay-row {
@@ -739,6 +746,29 @@ body.theme-vars .overlay-btn {
     gap: 12px;
 }
 
+/* Leaderboard loading skeleton */
+.leaderboard .lb-skel-row .sk {
+    display: inline-block;
+    background: linear-gradient(90deg, #e5e7eb, #f3f4f6, #e5e7eb);
+    background-size: 200% 100%;
+    border-radius: 6px;
+    height: 14px;
+    animation: shimmer 1.1s ease-in-out infinite;
+}
+
+.leaderboard .lb-skel-row .sk-num {
+    width: 24px;
+}
+
+.leaderboard .lb-skel-row .sk-name {
+    width: 120px;
+    height: 16px;
+}
+
+.leaderboard .lb-skel-row .sk-time {
+    width: 64px;
+}
+
 .completed-stats {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -852,13 +882,13 @@ body.theme-vars .overlay-hint {
     flex-direction: column;
     align-items: stretch;
     gap: 8px;
-    padding: calc(env(safe-area-inset-top, 0) + 8px) 8px 8px 8px;
+    padding: calc(env(safe-area-inset-top, 0) + 24px) 8px 8px 8px;
 }
 
 /* Desktop / larger screens: stack in the top-right corner */
 @media (min-width: 700px) {
     .toast-container {
-        top: 16px;
+        top: 32px;
         right: 16px;
         left: auto;
         width: min(360px, calc(100vw - 32px));
