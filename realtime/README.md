@@ -1,5 +1,10 @@
 # Daily Set Realtime (Go)
 
+[![Live - daily-set-realtime](https://img.shields.io/badge/live-daily--set--realtime-5B21B6)](https://daily-set-realtime.fly.dev/)
+[![Health](https://img.shields.io/badge/health-%2Fhealth-brightgreen)](https://daily-set-realtime.fly.dev/health)
+[![Status](https://img.shields.io/website?url=https%3A%2F%2Fdaily-set-realtime.fly.dev%2Fhealth&label=status)](https://daily-set-realtime.fly.dev/health)
+[![Go](https://img.shields.io/badge/Go-1.22-00ADD8?logo=go&logoColor=white)](https://go.dev/)
+
 A lightweight WebSocket gateway in Go that bridges clients to backend events via NATS.
 
 - Endpoint: /ws
@@ -10,19 +15,21 @@ A lightweight WebSocket gateway in Go that bridges clients to backend events via
 
 - REALTIME_ADDR=:8081
 - REALTIME_JWT_SECRET=devsecret (optional)
-- NATS_URL=nats://localhost:4222 (optional)
+- NATS_URL=nats://localhost:4222 (optional in dev)
 
 ## Message Envelope
 
+```json
 {
-"v": 1,
-"type": "action|update|presence|subscribe",
-"room": "room-id",
-"from": "user-id",
-"id": "uuid",
-"ts": "ISO-8601",
-"payload": {}
+  "v": 1,
+  "type": "action|update|presence|subscribe",
+  "room": "room-id",
+  "from": "user-id",
+  "id": "uuid",
+  "ts": "ISO-8601",
+  "payload": {}
 }
+```
 
 ## Subjects
 
@@ -31,7 +38,7 @@ A lightweight WebSocket gateway in Go that bridges clients to backend events via
 
 ## Build & Run
 
-- go build ./realtime && ./realtime
+- `go build ./realtime && ./realtime`
 - Container: see Dockerfile in this folder
 
 ## Deploy on Fly.io (separate app)
