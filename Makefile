@@ -63,8 +63,8 @@ frontend-build:
 	cd frontend && npm run build
 
 deploy: frontend-build
-	bash scripts/realtime_deploy.sh
-	bash scripts/nats_deploy.sh
+	bash scripts/deploy_nats.sh
+	bash scripts/deploy_realtime.sh
 	bash scripts/deploy.sh
 
 # Delete local SQLite DB and re-initialize schema
