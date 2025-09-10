@@ -18,10 +18,12 @@ from sqlmodel import Session as SQLSession
 import json
 from datetime import datetime, timezone
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.gzip import GZipMiddleware
 from .logging_utils import setup_logging, get_logger, request_id_ctx
 from .realtime_publisher import publish_room_update_sync
 import logging
 import uuid
+from urllib.parse import urlparse
 
 
 # Rate limiting - store last request times per IP
@@ -148,12 +150,15 @@ setup_logging(logging.INFO)
 logger = get_logger("app")
 app = FastAPI(title="Daily Set")
 
+# Enable gzip compression for text payloads (HTML, JS, CSS, JSON, etc.)
+app.add_middleware(GZipMiddleware, minimum_size=512)
+
 # Security headers & Content Security Policy
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
         response = await call_next(request)
         # Strict Content Security Policy suitable for this app
-        csp = " ".join([
+        csp = "; ".join([
             "default-src 'self'",
             "script-src 'self'",
             "style-src 'self' 'unsafe-inline'",
@@ -223,17 +228,48 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
 app.add_middleware(RequestLoggingMiddleware)
 
 # Configure CORS
+def _origin_from_url(u: str):
+    """Return an HTTP(S) origin for ws/wss/http/https URLs; otherwise None."""
+    try:
+        p = urlparse(u)
+        if p.scheme in ("ws", "wss"):
+            scheme = "https" if p.scheme == "wss" else "http"
+        elif p.scheme in ("http", "https"):
+            scheme = p.scheme
+        else:
+            return None
+        if not p.hostname:
+            return None
+        host = p.hostname
+        if p.port:
+            host = f"{host}:{p.port}"
+        return f"{scheme}://{host}"
+    except Exception:
+        return None
+
+# Base allowed origins
+allowed_origins = [
+    "https://daily-set.fly.dev",  # Production domain
+    "http://localhost:3000",      # Local development
+    "http://localhost:8000",      # Local FastAPI server
+    "http://127.0.0.1:3000",      # Alternative localhost
+    "http://127.0.0.1:8000",      # Alternative localhost
+    "http://localhost:5173",       # Vite dev server
+    "http://127.0.0.1:5173",       # Vite dev server alt
+]
+
+# Optionally include realtime and NATS origins from env if they are browser-relevant
+import os as _os
+for _env in ("REALTIME_WS_URL", "NATS_URL"):
+    _val = _os.getenv(_env)
+    if _val:
+        _origin = _origin_from_url(_val)
+        if _origin and _origin not in allowed_origins:
+            allowed_origins.append(_origin)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://daily-set.fly.dev",  # Production domain
-        "http://localhost:3000",      # Local development
-        "http://localhost:8000",      # Local FastAPI server
-        "http://127.0.0.1:3000",     # Alternative localhost
-    "http://127.0.0.1:8000",     # Alternative localhost
-    "http://localhost:5173",     # Vite dev server
-    "http://127.0.0.1:5173",     # Vite dev server alt
-    ],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=[
