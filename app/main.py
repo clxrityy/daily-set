@@ -280,6 +280,70 @@ def site_manifest():
     return JSONResponse({"detail": "site.webmanifest not found"}, status_code=404)
 
 
+@app.get("/manifest.webmanifest", include_in_schema=False)
+def manifest_alias():
+    """Serve a PWA manifest at the conventional root path.
+
+    Prefer an explicit manifest.webmanifest in static; otherwise fall back to site.webmanifest.
+    """
+    primary = _STATIC_DIR / "manifest.webmanifest"
+    if primary.exists():
+        return FileResponse(str(primary), media_type="application/manifest+json")
+    fallback = _STATIC_DIR / "site.webmanifest"
+    if fallback.exists():
+        return FileResponse(str(fallback), media_type="application/manifest+json")
+    return JSONResponse({"detail": "manifest not found"}, status_code=404)
+
+
+# Serve common icon files at root so browsers/PWAs can discover them
+@app.get("/android-chrome-192x192.png", include_in_schema=False)
+def android_chrome_192():
+    path = _STATIC_DIR / "android-chrome-192x192.png"
+    if path.exists():
+        return FileResponse(str(path), media_type="image/png")
+    return JSONResponse({"detail": "android-chrome-192x192.png not found"}, status_code=404)
+
+
+@app.get("/android-chrome-512x512.png", include_in_schema=False)
+def android_chrome_512():
+    path = _STATIC_DIR / "android-chrome-512x512.png"
+    if path.exists():
+        return FileResponse(str(path), media_type="image/png")
+    return JSONResponse({"detail": "android-chrome-512x512.png not found"}, status_code=404)
+
+
+@app.get("/apple-touch-icon.png", include_in_schema=False)
+def apple_touch_icon():
+    path = _STATIC_DIR / "apple-touch-icon.png"
+    if path.exists():
+        return FileResponse(str(path), media_type="image/png")
+    return JSONResponse({"detail": "apple-touch-icon.png not found"}, status_code=404)
+
+
+@app.get("/favicon-16x16.png", include_in_schema=False)
+def favicon_16():
+    path = _STATIC_DIR / "favicon-16x16.png"
+    if path.exists():
+        return FileResponse(str(path), media_type="image/png")
+    return JSONResponse({"detail": "favicon-16x16.png not found"}, status_code=404)
+
+
+@app.get("/favicon-32x32.png", include_in_schema=False)
+def favicon_32():
+    path = _STATIC_DIR / "favicon-32x32.png"
+    if path.exists():
+        return FileResponse(str(path), media_type="image/png")
+    return JSONResponse({"detail": "favicon-32x32.png not found"}, status_code=404)
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon_ico():
+    path = _STATIC_DIR / "favicon.ico"
+    if path.exists():
+        return FileResponse(str(path), media_type="image/x-icon")
+    return JSONResponse({"detail": "favicon.ico not found"}, status_code=404)
+
+
 @app.get("/health", include_in_schema=False)
 def health():
     return JSONResponse({"status": "ok"})
