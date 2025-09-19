@@ -2,7 +2,7 @@
 FROM golang:tip-alpine3.22 AS build
 WORKDIR /app
 COPY go.mod ./
-RUN --mount=type=cache,target=/go/pkg/mod apt-get update && apt-get upgrade -y && go mod download
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
 COPY . .
 RUN --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 \
