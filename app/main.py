@@ -864,6 +864,11 @@ def get_current_session(request: Request, session: Session = Depends(get_session
 
 @app.post("/api/rotate_session/{session_id}")
 def rotate_session(session_id: str, request: Request, response: Response, session: Session = Depends(get_session)):
+    # Validate that the session_id is a well-formed UUID string
+    try:
+        uuid_obj = uuid.UUID(session_id)
+    except (ValueError, AttributeError):
+        raise HTTPException(status_code=400, detail="Invalid session id format")
     # require a valid session token from the client (Authorization: Bearer <token> or cookie)
     token = None
     auth = request.headers.get('authorization')
