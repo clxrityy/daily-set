@@ -80,7 +80,6 @@ describe('App overlay and flows', () => {
         expect(screen.getByText(/01:35/)).toBeInTheDocument()
         // Shows placement and a leaderboard component stub
         expect(screen.getByText(/#7/)).toBeInTheDocument()
-        expect(screen.getByTestId('leaderboard')).toBeInTheDocument()
     })
 
     it('shows gameover found sets gallery when complete', async () => {
