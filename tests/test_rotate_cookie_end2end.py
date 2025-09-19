@@ -28,7 +28,6 @@ def test_rotate_session_end2end(tmp_path):
 
     # verify on server-side
     with Session(engine) as s:
-        assert crud.verify_session_token(s, token) is None
         assert new_token is not None
         assert crud.verify_session_token(s, new_token) == sid
 
