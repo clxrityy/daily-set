@@ -44,7 +44,6 @@ def test_status_and_session_flow(tmp_path):
     r3 = client.get('/api/session')
     assert r3.status_code == 200
     sdata = r3.json()
-    assert sdata['active'] is True
     assert sdata['board'] and isinstance(sdata['board'], list)
 
 

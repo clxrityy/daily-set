@@ -867,6 +867,7 @@ def rotate_session(session_id: str, request: Request, response: Response, sessio
     # Validate that the session_id is a well-formed UUID string
     try:
         uuid_obj = uuid.UUID(session_id)
+        assert str(uuid_obj) == session_id
     except (ValueError, AttributeError):
         raise HTTPException(status_code=400, detail="Invalid session id format")
     # require a valid session token from the client (Authorization: Bearer <token> or cookie)
