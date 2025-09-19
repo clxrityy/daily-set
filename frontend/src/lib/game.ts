@@ -52,9 +52,9 @@ export function hasValidSets(board: ReadonlyArray<Card>, cleared?: ReadonlySet<n
 function randomUsername() {
     const adjectives = ["Swift", "Quick", "Clever", "Sharp", "Bright", "Smart", "Fast", "Keen", "Wise", "Bold"]
     const nouns = ["Ace", "Pro", "Star", "Bee", "Hawk", "Wolf", "Lynx", "Fox", "Owl", "Bear"]
-    const adj = adjectives[Math.floor(Math.random() * adjectives.length)]
-    const noun = nouns[Math.floor(Math.random() * nouns.length)]
-    const num = Math.floor(Math.random() * 100)
+    const adjIdxArr = new Uint32Array(1); window.crypto.getRandomValues(adjIdxArr); const adj = adjectives[adjIdxArr[0] % adjectives.length];
+    const nounIdxArr = new Uint32Array(1); window.crypto.getRandomValues(nounIdxArr); const noun = nouns[nounIdxArr[0] % nouns.length];
+    const numArr = new Uint32Array(1); window.crypto.getRandomValues(numArr); const num = numArr[0] % 100;
     const base = `${adj}${noun}${num}`.replace(/[^A-Za-z0-9_-]/g, '')
     return base.slice(0, 12)
 }
