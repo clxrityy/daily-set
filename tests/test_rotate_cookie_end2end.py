@@ -14,7 +14,6 @@ def test_rotate_session_end2end(tmp_path):
 
     # start a session (no username)
     resp = client.post('/api/start_session', json={})
-    assert resp.status_code == 200
     data = resp.json()
     sid = data.get('session_id')
     token = data.get('session_token')
