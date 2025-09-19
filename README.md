@@ -2,7 +2,7 @@
 
 [![Backend CI](https://github.com/clxrityy/daily-set/actions/workflows/backend.yml/badge.svg?branch=main)](https://github.com/clxrityy/daily-set/actions/workflows/backend.yml)[![Backend Coverage](https://codecov.io/gh/clxrityy/daily-set/branch/main/graph/badge.svg?flag=backend)](https://codecov.io/gh/clxrityy/daily-set)
 
-[![Realtime CI](https://github.com/clxrityy/daily-set/actions/workflows/realtime.yml/badge.svg?branch=main)](https://github.com/clxrityy/daily-set/actions/workflows/realtime.yml)[![Realtime Coverage](https://codecov.io/gh/clxrityy/daily-set/branch/main/graph/badge.svg?flag=realtime)](https://codecov.io/gh/clxrityy/daily-set)
+[![Realtime CI](https://github.com/clxrityy/daily-set/actions/workflows/realtime.yml/badge.svg?branch=main)](https://github.com/clxrityy/daily-set/actions/workflows/realtime.yml)[![Realtime Coverage](https://codecov.io/gh/clxrityy/daily-set/branch/main/graph/badge.svg?flag=realtime)](https://codecov.io/gh/clxrityy/daily-set)[![Realtime Live](https://img.shields.io/badge/Live%20-%20Realtime?style=flat&logo=sequelize&logoColor=%23dddddd&label=Realtime&color=%2398c901&link=https%3A%2F%2Fdaily-set-realtime.fly.dev%2Fhealth)](https://daily-set-realtime.fly.dev/health)
 
 [![Frontend CI](https://github.com/clxrityy/daily-set/actions/workflows/frontend.yml/badge.svg?branch=main)](https://github.com/clxrityy/daily-set/actions/workflows/frontend.yml)[![Frontend Coverage](https://codecov.io/gh/clxrityy/daily-set/branch/main/graph/badge.svg?flag=frontend)](https://codecov.io/gh/clxrityy/daily-set)
 
