@@ -779,7 +779,7 @@ def _create_player_and_set_cookie(session: Session, username: Optional[str], res
         raise HTTPException(status_code=500, detail="player has no id")
     # sign and set player_token cookie
     ptoken = crud.sign_player_token(session, player_id)
-    response.set_cookie('player_token', ptoken or '', httponly=True, samesite='lax')
+    response.set_cookie('player_token', ptoken or '', httponly=True, samesite='lax', secure=True)
     return player_id
 
 @app.post("/api/start_session")
