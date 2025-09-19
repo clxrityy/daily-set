@@ -10,6 +10,8 @@ A web application for playing the card game "Set" online.
 
 > https://daily-set.fly.dev/
 
+<img src="example.gif" alt="example" />
+
 ## Usage
 
 ```bash

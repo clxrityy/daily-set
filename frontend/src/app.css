@@ -347,41 +347,130 @@ body.theme-vars .overlay-btn {
     color: #dc2626;
 }
 
-/* Board layout: reuse existing #board styles from static CSS; this adds grid fallback */
-.board {
+/* Board containment: ensure board is always fully visible on mobile, no scrolling required */
+.board-container {
+    width: auto;
+    max-width: 100vw;
+    height: 100dvh;
+    max-height: 100%;
     display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
-    margin-top: 20px;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    background: var(--bg);
 }
 
-@media (min-width: 700px) {
+::-webkit-scrollbar {
+    display: none;
+}
+
+/* Board layout: 4 columns on large screens, 3 on medium, 2 on small, 1 on extra small */
+
+.board {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 4px 12px;
+    margin: 0 0;
+    width: 100%;
+    max-width: 1200px;
+    height: 75%;
+    max-height: screen;
+    justify-items: center;
+    align-items: center;
+    overflow: -moz-hidden-unscrollable;
+}
+
+@media (max-width: 1100px) {
     .board {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-        gap: 12px;
+        grid-template-columns: repeat(3, 1fr);
+        max-width: 900px;
+        gap: 4px 12px;
+    }
+}
+
+@media (max-width: 800px) {
+    .board {
+        grid-template-columns: repeat(2, 1fr);
+        max-width: 600px;
+        gap: 4px 12px;
+    }
+}
+
+@media (max-width: 520px) {
+    .board {
+        grid-template-columns: 1fr;
+        max-width: 100vw;
+        gap: 8px 12px;
     }
 }
 
 /* Improve mobile hit areas and scrolling ergonomics */
 .card {
-    min-height: 100px;
-    /* ensure ~44px finger target for interior controls */
+    border-radius: 8px;
+    min-height: clamp(70px, 13vw, 100px);
     touch-action: manipulation;
-    /* avoid double-tap zoom, improve latency */
     -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 95%;
+    aspect-ratio: 3/4;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+
+    .card .symbols {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+    }
+
+    .card .symbols svg {
+        width: clamp(18px, 22vw, 48px);
+        height: clamp(18px, 22vw, 48px);
+        max-width: 90%;
+        max-height: 90%;
+        display: block;
+    }
 }
 
 /* Slightly larger cards on very small screens for accessibility */
 @media (max-width: 420px) {
     .board {
         display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 10px;
+        grid-template-columns: repeat(auto-fit, minmax(var(--card-size), 2fr));
+        grid-auto-rows: 1fr;
+        gap: 8px 8px;
+        width: auto;
+        max-width: 100vw;
+        height: 100%;
+        margin: 0;
+        max-height: 100dvh;
     }
 
     .card {
-        min-height: 110px;
+        min-height: clamp(40px, 16vw, 70px);
+        min-width: 0;
+        max-width: 100%;
+        aspect-ratio: 3/4;
+        font-size: 0.8rem;
+    }
+
+    .card .symbols svg {
+        width: clamp(12px, 18vw, 32px);
+        height: clamp(12px, 18vw, 32px);
+    }
+}
+
+@media (max-width: 340px) {
+    .card {
+        min-height: clamp(40px, 18vw, 70px);
+        font-size: 0.8rem;
     }
 }
 
@@ -445,7 +534,7 @@ body.theme-vars .overlay-btn {
     display: flex;
     align-items: center;
     gap: 12px;
-    margin-bottom: 12px;
+    margin-bottom: 6px;
 }
 
 .timer {

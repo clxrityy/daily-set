@@ -5,7 +5,6 @@
 
 body {
     font-family: system-ui, -apple-system, sans-serif;
-    padding: 20px
 }
 
 .card {
@@ -16,8 +15,8 @@ body {
     /* responsive square card */
     width: var(--card-size);
     height: var(--card-size);
-    min-width: 48px;
-    min-height: 48px;
+    min-width: 36px;
+    min-height: 36px;
     text-align: center;
     display: flex;
     align-items: center;
@@ -32,14 +31,6 @@ body {
 
 .leaderboard {
     margin-top: 16px
-}
-
-.controls {
-    margin-bottom: 12px;
-    display: flex;
-    gap: 12px;
-    align-items: center;
-    flex-wrap: wrap;
 }
 
 .timer-container {
@@ -215,19 +206,6 @@ body {
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
-}
-
-/* board container should wrap cards and remain responsive and centered */
-#board {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
-    align-items: center;
-    justify-content: center;
-    margin: 0 auto;
-    max-width: calc(var(--card-size) * 6 + 96px);
-    /* allow up to 6 cards per row comfortably */
-    padding: 12px;
 }
 
 /* center the layout content so main column is centered on narrow screens */
@@ -411,7 +389,7 @@ body {
     .card {
         width: auto !important;
         height: auto !important;
-        min-width: 0 !important;
+        min-width: 7rem !important;
         min-height: 120px !important;
         margin: 0 !important;
         padding: 10px !important;
