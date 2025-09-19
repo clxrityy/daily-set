@@ -807,7 +807,7 @@ def start_session(body: StartSessionRequest, request: Request, response: Respons
     if gs.id is not None:
         token = crud.sign_session_token(session, gs.id)
         # also set session_token cookie for convenience
-        response.set_cookie('session_token', token or '', httponly=True, samesite='lax')
+        response.set_cookie('session_token', token or '', httponly=True, samesite='lax', secure=True)
     return {"session_id": gs.id, "session_token": token, "start_ts": start_ts}
 
 
