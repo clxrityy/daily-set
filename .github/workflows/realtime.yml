@@ -1,5 +1,11 @@
 name: Realtime CI
 
+permissions:
+  contents: read
+  checks: write
+  actions: read
+  pull-requests: write
+
 on:
   push:
     branches: [main]

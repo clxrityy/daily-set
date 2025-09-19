@@ -1,5 +1,11 @@
 name: ZAP Baseline Scan
 
+permissions:
+  contents: read
+  checks: write
+  actions: read
+  pull-requests: write
+
 on:
   workflow_dispatch:
     inputs:
