@@ -3,7 +3,7 @@ uvicorn[standard]==0.22.0
 sqlmodel==0.0.8
 passlib==1.7.4
 aiofiles==23.1.0
-python-multipart==0.0.18
+python-multipart==0.0.22
 httpx==0.23.3
 pytest==7.4.2
 pytest-cov==4.1.0
